@@ -4,9 +4,9 @@
 
 # tabstand
 
-**A self-turning music stand for your tabs**
+**A self-hosted, open-source e-music-stand**
 
-Self-hosted guitar-tab viewer & private library · pinyin search · multi-column view · Bluetooth-pedal page turns · one-click import
+Find → View → Turn → Manage your tabs, end to end
 
 [简体中文](README.md) · **English**
 
@@ -20,7 +20,7 @@ Self-hosted guitar-tab viewer & private library · pinyin search · multi-column
 
 ---
 
-Turning pages while you play is annoying: paper charts need a free hand, phone tabs cramp onto a tiny screen and you keep scrolling. **tabstand** smooths that out — fit a whole song on one screen, auto-scroll at a steady pace, tap a Bluetooth pedal to turn the page. Your hands stay on the strings.
+Playing guitar, every step around the tab is a hassle: searching tab sites is tedious, paper charts need a free hand, phone tabs cramp into a tiny screen, and the tabs you collect end up scattered everywhere. **tabstand** smooths out the whole pipeline — a self-hosted, open-source e-music-stand that covers **find → view → turn → manage**, end to end, so your hands stay on the strings while you play.
 
 Instrument-neutral by design; today it implements guitar (strumming / fingerstyle). **The tool is open source and distributable, the library stays private**: tabs are copyrighted scans and never enter git (`library/` is gitignored). Clone it, then build your own library through the in-app **Import** panel.
 
@@ -28,38 +28,43 @@ Instrument-neutral by design; today it implements guitar (strumming / fingerstyl
   <img src="docs/images/01-home.png" width="800" alt="Library home" />
 </div>
 
-## ✨ Features
+## ✨ End to end: find → view → turn → manage
 
-- **🎼 Smooth viewing** — adaptive multi-column layout (auto / 1 / 2 / 3 columns, remembered per song); a short song fits on one screen, no page turns
-- **🦶 Bluetooth pedal** — page-turn on `keydown`, works with pedals that act as a Bluetooth keyboard (`↑↓←→` / `PageUp/Down` / space)
-- **🌀 Auto-scroll** — rAF smooth scrolling with remembered speed, Wake Lock keeps the screen on, installable as a standalone PWA
-- **🔤 Pinyin search** — fuzzy-match Chinese titles by pinyin / initials; search by artist too
-- **📥 One-click import** — three entry points (search by title / paste URL / upload images); for hard, paywalled, or JS-rendered tabs there's a manual fallback: open the source page → drag or Ctrl+V paste → reorder in preview → commit
-- **✎ Library editing** — reorder pages, delete pages, split into versions, move back to the main tab, edit artist / title; deletes go to a recycle bin
-- **🗂 Zero database** — `library/` is scanned into a `manifest.json`; change the library, refresh, done
-- **📄 Offline PDF** — a Python script builds bookmarked PDFs (sorted by pinyin / alphabet, blank pages inserted for two-page spreads)
+### 🔍 Find
+Built-in search across common Chinese tab sites (jita5 / echangwang / and more): **free tabs download straight into the library; paid tabs you buy, then import as images**. Three entry points (search by title / paste URL / upload images) plus a manual fallback (open the source page → drag or Ctrl+V paste → reorder in preview). Match titles by pinyin / initials, or search by artist.
+
+### 👀 View
+Adaptive multi-column layout (auto / 1 / 2 / 3 columns, remembered per song) — **on a desktop, a song of up to three pages lays out on one screen, no page turns**. Switchable sheet brightness, easy on the eyes.
+
+### 👇 Turn
+rAF smooth **auto-scroll** with remembered speed; `keydown` paging works with **page-turner pedals** that act as a Bluetooth keyboard (`↑↓←→` / `PageUp/Down` / space) — turn pages mid-song without lifting your hands. Wake Lock keeps the screen on; installable as a standalone PWA.
+
+### 🗂 Manage
+**All-in-one library management**: reorder / delete pages, split into versions, move back to the main tab, edit artist / title; deletes go to a recycle bin. Zero database — `library/` is scanned into an index, change it and refresh.
+
+> 📄 **Bonus**: a Python script builds bookmarked offline PDFs (sorted by pinyin / alphabet, blank pages inserted for two-page spreads) for printing / offline practice.
 
 ## 📸 Screenshots
 
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/02-viewer.png" alt="Multi-column stand" /><br/>
-      <sub><b>Multi-column stand</b> — the whole song laid out on one screen, switchable brightness, adjustable auto-scroll</sub>
+      <img src="docs/images/03-import-search.png" alt="Find" /><br/>
+      <sub><b>🔍 Find</b> — search aggregates several tab sites; free tabs download directly, or paste a URL / upload images</sub>
     </td>
     <td width="50%">
-      <img src="docs/images/05-mobile.png" alt="Mobile stand" /><br/>
-      <sub><b>Turns into a stand</b> — single-column portrait on phone / tablet; add a Bluetooth pedal and it's an e-music-stand</sub>
+      <img src="docs/images/02-viewer.png" alt="View" /><br/>
+      <sub><b>👀 View</b> — adaptive multi-column; a whole song on one screen on desktop, switchable brightness</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/images/03-import-search.png" alt="One-click import" /><br/>
-      <sub><b>One-click import</b> — search aggregates several tab sites; what it can't grab, paste a URL or upload images</sub>
+      <img src="docs/images/05-mobile.png" alt="Turn" /><br/>
+      <sub><b>👇 Turn</b> — portrait on phone / tablet; auto-scroll + Bluetooth pedal, hands stay on the strings</sub>
     </td>
     <td width="50%">
-      <img src="docs/images/04-edit.png" alt="Library editing" /><br/>
-      <sub><b>Library editing</b> — reorder / delete pages / split versions / edit artist; deletes go to a recycle bin</sub>
+      <img src="docs/images/04-edit.png" alt="Manage" /><br/>
+      <sub><b>🗂 Manage</b> — reorder / delete pages / split versions / edit artist; deletes go to a recycle bin</sub>
     </td>
   </tr>
 </table>
