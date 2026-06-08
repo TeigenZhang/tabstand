@@ -1,0 +1,46 @@
+# ============================================================
+# Content and build artifacts stay out of the repo:
+# the tool is shareable, the tab library is private
+# ============================================================
+
+# Tab library — keep the folder skeleton, ignore the scans inside
+# (copyrighted content, bring your own)
+/library/*
+!/library/strumming/
+!/library/fingerstyle/
+/library/strumming/*
+/library/fingerstyle/*
+!/library/strumming/.gitkeep
+!/library/fingerstyle/.gitkeep
+
+# Generated artifacts
+/output/
+/data/manifest.json
+tsconfig.tsbuildinfo
+
+# Personal tab-source archive — keep the example, ignore your own list
+/data/sources.json
+
+# Environment config
+.env.local
+.env*.local
+
+# Node
+node_modules/
+.next/
+next-env.d.ts
+
+# Deploy logs
+/deploy/*.log
+
+# Local agent guidance — kept on disk, not published
+CLAUDE.md
+
+# System junk
+.DS_Store
+Thumbs.db
+__pycache__/
+
+# Browser automation artifacts
+.playwright-cli/
+.context/

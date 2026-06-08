@@ -1,0 +1,32 @@
+{
+  "name": "tabstand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "自托管吉他谱查看 + 私有谱库工具 — 拼音搜索、连续滚动、蓝牙踏板翻页、一键导入",
+  "license": "MIT",
+  "author": "TeigenZhang",
+  "scripts": {
+    "scan": "node scripts/scan.mjs",
+    "dev": "npm run scan && next dev -p ${PORT:-6060}",
+    "build": "npm run scan && next build",
+    "start": "next start -p ${PORT:-6060}",
+    "grab": "node scripts/grab.mjs"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.7.2",
+    "next": "14.2.5",
+    "pinyin-pro": "^3.26.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "undici": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3"
+  }
+}

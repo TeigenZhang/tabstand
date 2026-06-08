@@ -1,0 +1,13 @@
+{
+  "name": "Guitar Tabs · 吉他谱",
+  "short_name": "吉他谱",
+  "description": "自托管吉他谱库 — 拼音搜索、连续滚动、踏板翻页",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

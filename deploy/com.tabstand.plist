@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd 用户级服务：开机自启吉他谱查谱网页。
+  安装见 deploy/README.md。占位符 __NODE__ / __NODE_DIR__ / __REPO__ 需替换。
+  注意：ProgramArguments[0] 用 node 二进制绝对路径直接启动（不经 shell 脚本）。
+  若项目放在 ~/Documents / ~/Desktop 等 macOS TCC 保护目录下，这样可避免 launchd
+  读取脚本被 TCC 拦截（Operation not permitted）；node 二进制本身在保护目录外。
+  node 升级：homebrew symlink 路径不变，kickstart -k 重启即用新版；若换了
+  node 安装位置导致路径变，重跑 README 的安装命令重生成本 plist 即可。
+  重启请用：launchctl kickstart -k gui/$(id -u)/com.tabstand
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tabstand</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>node_modules/.bin/next</string>
+    <string>start</string>
+    <string>-p</string>
+    <string>6060</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>6060</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <!-- launchd's PATH is minimal; add node's dir so next's child
+         processes (and scan.mjs spawned on import) resolve node. -->
+    <key>PATH</key>
+    <string>__NODE_DIR__:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__REPO__/deploy/tabstand.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO__/deploy/tabstand.log</string>
+</dict>
+</plist>

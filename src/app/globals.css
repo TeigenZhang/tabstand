@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+/* ============================================================
+   「琴房夜灯」— 暖黑环境光 + 琥珀舞台光晕 + 细噪点。
+   深 stone 基底、amber 单点缀，宋体衬线做品牌标题、
+   等宽数字做徽标，营造调音器硬件般的工具感。
+   ============================================================ */
+html {
+  @apply bg-stone-950 text-stone-100;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+body {
+  /* Two stage lights: a warm key light from above, a faint amber
+     spill bottom-left — keeps big dark areas from reading flat */
+  background-image:
+    radial-gradient(120% 80% at 50% -20%, rgba(245, 158, 11, 0.09), transparent 60%),
+    radial-gradient(90% 60% at -10% 110%, rgba(217, 119, 6, 0.05), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Film grain over everything — barely visible, kills banding and
+   gives the dark theme a physical texture. Pure CSS, no asset. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Sheet pages must stay crisp — keep the film grain off the viewer.
+   Legibility of the scan beats atmosphere there. */
+body:has([data-sheet-viewer])::before {
+  display: none;
+}
+
+/* JS drives smooth scrolling; disable native to avoid compounding */
+html,
+body {
+  scroll-behavior: auto;
+}
+
+::selection {
+  background: rgba(245, 158, 11, 0.35);
+}
+
+/* Tame the scrollbar so it doesn't clash with the dark UI */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 162, 158, 0.3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 162, 158, 0.3);
+  border-radius: 9999px;
+}
+
+@layer components {
+  /* Brand / page titles — serif gives the music-book feel */
+  .font-display {
+    font-family: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun',
+      Georgia, 'Times New Roman', serif;
+  }
+
+  /* Tuner-style numerals for badges and counters */
+  .font-tuner {
+    font-family: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Shared text input */
+  .field {
+    @apply min-w-0 rounded-lg border border-stone-700/80 bg-stone-900/80 px-3 py-2 text-sm text-stone-100 outline-none transition-all duration-200 placeholder:text-stone-500;
+  }
+  .field:focus {
+    @apply border-amber-500/60 bg-stone-900;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+  }
+
+  /* Modal scaffolding — overlay dims + blurs, card pops in */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm;
+    animation: overlay-in 0.18s ease-out;
+  }
+  .modal-card {
+    @apply mt-10 w-full rounded-2xl border border-stone-800 bg-stone-950/95 p-5 shadow-2xl shadow-black/60;
+    background-image: radial-gradient(
+      120% 60% at 50% -10%,
+      rgba(245, 158, 11, 0.06),
+      transparent 55%
+    );
+    animation: card-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* Card entrance for the song grid — staggered via inline delay */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+/* Breathing glow on the auto-scroll FAB while it's running */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(245, 158, 11, 0);
+  }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 2.2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .modal-overlay,
+  .modal-card,
+  .animate-glow-pulse {
+    animation: none;
+  }
+}

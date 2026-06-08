@@ -1,0 +1,17 @@
+{
+  "_comment": "谱源链接档案示例。复制为 data/sources.json 使用（已被 gitignore，存你自己的清单）。status: todo=待扒谱, archived=已入库",
+  "songs": [
+    {
+      "name": "示例歌名",
+      "status": "todo",
+      "category": "strumming",
+      "links": ["https://www.jita5.cn/qupu/qita/0000.html"]
+    },
+    {
+      "name": "Example Song",
+      "status": "archived",
+      "category": "fingerstyle",
+      "links": ["https://www.bilibili.com/video/BVxxxxxxxxxx"]
+    }
+  ]
+}

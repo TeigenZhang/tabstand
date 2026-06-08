@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Guitar pick on the night-stage background -->
+  <defs>
+    <linearGradient id="pick" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0c0a09"/>
+  <path d="M32 54C24 46 17 37.5 17 27.5 17 18 23.5 12 32 12s15 6 15 15.5C47 37.5 40 46 32 54Z" fill="url(#pick)"/>
+  <path d="M26 22.5h12M26 28h12M26 33.5h12" stroke="#0c0a09" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
