@@ -1,6 +1,7 @@
 import { readManifest } from '@/lib/manifest'
 import SongList from '@/components/SongList'
 import ImportPanel from '@/components/ImportPanel'
+import MoodPick from '@/components/MoodPick'
 import { SOURCE_LIST } from '../../scripts/lib/search-sources.mjs'
 
 // Manifest is read per-request; a re-scan only needs a page refresh
@@ -32,17 +33,20 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-        <ImportPanel
-          categories={manifest.categories}
-          sources={SOURCE_LIST}
-          songs={manifest.songs.map((s) => ({
-            category: s.category,
-            name: s.name,
-            title: s.title,
-            pages: s.pages.length,
-            versions: s.versions.length,
-          }))}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <MoodPick songs={manifest.songs} categories={manifest.categories} />
+          <ImportPanel
+            categories={manifest.categories}
+            sources={SOURCE_LIST}
+            songs={manifest.songs.map((s) => ({
+              category: s.category,
+              name: s.name,
+              title: s.title,
+              pages: s.pages.length,
+              versions: s.versions.length,
+            }))}
+          />
+        </div>
       </header>
       <SongList manifest={manifest} />
     </main>

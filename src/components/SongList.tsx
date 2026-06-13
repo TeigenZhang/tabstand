@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Manifest, Song } from '@/lib/manifest'
+import { coverUrl, pageCount } from '@/lib/songMedia'
 
 // ============================================================
 // Song browser — thumbnail card grid with category tabs and
@@ -11,25 +12,6 @@ import type { Manifest, Song } from '@/lib/manifest'
 // ============================================================
 
 const enc = (s: string) => encodeURIComponent(s)
-
-// Cover = first page of the main arrangement, or the first
-// version's first page for version-only songs. ?v= busts the 1h
-// image cache when an edit rewrites pages behind stable names.
-function coverUrl(song: Song): string | null {
-  const v = `?v=${song.rev ?? 0}`
-  if (song.pages.length > 0) {
-    return `/api/img/${enc(song.category)}/${enc(song.name)}/${enc(song.pages[0])}${v}`
-  }
-  const ver = song.versions[0]
-  if (ver?.pages.length) {
-    return `/api/img/${enc(song.category)}/${enc(song.name)}/versions/${enc(ver.name)}/${enc(ver.pages[0])}${v}`
-  }
-  return null
-}
-
-function pageCount(song: Song): number {
-  return song.pages.length || song.versions[0]?.pages.length || 0
-}
 
 function matches(song: Song, query: string): boolean {
   const q = query.trim().toLowerCase()
