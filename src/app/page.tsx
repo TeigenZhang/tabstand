@@ -1,6 +1,7 @@
 import { readManifest } from '@/lib/manifest'
 import SongList from '@/components/SongList'
 import ImportPanel from '@/components/ImportPanel'
+import { SOURCE_LIST } from '../../scripts/lib/search-sources.mjs'
 
 // Manifest is read per-request; a re-scan only needs a page refresh
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,7 @@ export default function HomePage() {
         </div>
         <ImportPanel
           categories={manifest.categories}
+          sources={SOURCE_LIST}
           songs={manifest.songs.map((s) => ({
             category: s.category,
             name: s.name,

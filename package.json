@@ -10,7 +10,8 @@
     "dev": "npm run scan && next dev -p ${PORT:-6060}",
     "build": "npm run scan && next build",
     "start": "next start -p ${PORT:-6060}",
-    "grab": "node scripts/grab.mjs"
+    "grab": "node scripts/grab.mjs",
+    "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {
     "iconv-lite": "^0.7.2",

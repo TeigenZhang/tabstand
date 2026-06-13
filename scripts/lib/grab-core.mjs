@@ -31,7 +31,7 @@ const EXT_BY_TYPE = {
 }
 
 const NOISE =
-  /logo|avatar|qrcode|thumbnail|titlepic|\/block\/|\/static\/|head_portrait|\bbg\b/i
+  /logo|avatar|qrcode|thumbnail|titlepic|singer|\/block\/|\/static\/|head_portrait|\bbg\b/i
 
 // Paywall markers — many WP tab sites (jitabang, dapula…) hide the
 // real sheet behind the ErphpDown plugin / a VIP wall and only leak
@@ -163,11 +163,27 @@ const isPublicHttpUrl = async (raw) => {
 // each target is validated before it is ever fetched. Legit hops
 // (http→https, B站 /read→/opus) are public, so they pass.
 const MAX_REDIRECTS = 5
-async function safeFetch(url, { headers = {}, dispatcher } = {}) {
+// `allowHost(url)` (optional): an extra per-hop host allowlist, checked on
+// the initial URL AND every redirect target. The thumbnail proxy passes it
+// so an allowlisted host's open-redirect/CDN 30x can't make the proxy fetch
+// off-allowlist content (the IP-SSRF guard alone wouldn't catch that).
+async function safeFetch(url, { headers = {}, dispatcher, signal, method = 'GET', body, allowHost } = {}) {
   let current = url
+  let curMethod = method
+  let curBody = body
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     await assertPublicHttpUrl(current) // pre-flight guard on every hop
-    const res = await fetch(current, { headers, dispatcher, redirect: 'manual' })
+    if (allowHost && !allowHost(current)) {
+      throw new Error('目标地址不在允许的域名内')
+    }
+    const res = await fetch(current, {
+      method: curMethod,
+      headers,
+      body: curBody,
+      dispatcher,
+      redirect: 'manual',
+      signal,
+    })
     const location = res.headers.get('location')
     if (res.status >= 300 && res.status < 400 && location) {
       await res.arrayBuffer().catch(() => {}) // drain to free the socket
@@ -175,6 +191,14 @@ async function safeFetch(url, { headers = {}, dispatcher } = {}) {
         current = new URL(location, current).href
       } catch {
         throw new Error('非法重定向地址')
+      }
+      // Per the fetch spec, a 301/302/303 turns a POST into a GET and
+      // drops the body; only 307/308 preserve method+body. The WordPress
+      // /EmpireCMS search POSTs that need this 302 to a GET result page,
+      // so collapsing to GET here is exactly the desired behaviour.
+      if (res.status !== 307 && res.status !== 308) {
+        curMethod = 'GET'
+        curBody = undefined
       }
       continue
     }
@@ -258,6 +282,21 @@ export function getImageSize(buf) {
   return null // unknown format — caller decides
 }
 
+// Identify a RASTER image by magic bytes and return its canonical MIME.
+// Used by the thumbnail proxy to serve a type derived from the bytes
+// themselves (never the server's Content-Type) — so an allowlisted CDN
+// can't smuggle image/svg+xml (active content → same-origin XSS) past it.
+export function rasterMime(buf) {
+  if (buf.length < 12) return null
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'image/gif'
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+    return 'image/webp'
+  }
+  return null
+}
+
 const cleanBilibiliUrl = (url) =>
   url.includes('hdslb.com') ? url.split('@')[0] : url
 
@@ -300,8 +339,22 @@ function solveCookieChallenge(html, setCookie) {
   return `t=${token}; r=${Number(secret) - 100}`
 }
 
-export async function fetchPage(url, dispatcher) {
-  const res = await safeFetch(url, { headers: { 'User-Agent': UA }, dispatcher })
+// `signal` (optional) bounds the whole fetch — including the cookie
+// challenge's second round-trip — so a slow source can be aborted by
+// the search layer instead of hanging the whole aggregation.
+//
+// `method`/`body`/`headers` (optional) support POST search endpoints
+// (e.g. 吉他园地, EmpireCMS sites) whose GET form silently ignores the
+// keyword. The cookie-challenge retry always re-issues as a plain GET
+// (POST search hosts don't run the 17jita JS challenge).
+export async function fetchPage(url, dispatcher, { signal, method = 'GET', body, headers = {} } = {}) {
+  const res = await safeFetch(url, {
+    headers: { 'User-Agent': UA, ...headers },
+    dispatcher,
+    signal,
+    method,
+    body,
+  })
   if (!res.ok) throw new Error(`页面请求失败：HTTP ${res.status}`)
 
   const buf = Buffer.from(await res.arrayBuffer())
@@ -314,6 +367,7 @@ export async function fetchPage(url, dispatcher) {
     const res2 = await safeFetch(res.url, {
       headers: { 'User-Agent': UA, Cookie: challengeCookie, Referer: url },
       dispatcher,
+      signal,
     })
     const buf2 = Buffer.from(await res2.arrayBuffer())
     html = decodeBody(buf2, res2.headers.get('content-type'))
@@ -356,12 +410,14 @@ async function downloadImage(url, referer, dispatcher, attempt = 1) {
 /**
  * @param {string} url
  * @param {{ name?: string, dispatcher?: any, onProgress?: (msg: string) => void }} [opts]
- * @returns {Promise<{ images: { data: Buffer, ext: string, width?: number, height?: number }[], finalUrl: string }>}
+ * @returns {Promise<{ images: { data: Buffer, ext: string, width?: number, height?: number }[], finalUrl: string, title: string }>}
  */
 export async function collectSheetImages(url, { name = '', dispatcher, onProgress } = {}) {
   const log = onProgress ?? (() => {})
   await assertPublicHttpUrl(url) // SSRF: guard the page URL (CLI path too)
   const { html, finalUrl } = await fetchPage(url, dispatcher)
+  // Page <title> feeds artist/song prefill on the paste-URL path
+  const pageTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() ?? ''
 
   // Bail early on paywalled pages — the real sheet isn't in the
   // public HTML, only thumbnails, so grabbing yields junk.
@@ -427,5 +483,125 @@ export async function collectSheetImages(url, { name = '', dispatcher, onProgres
   if (images.length === 0) {
     throw new Error('没有符合谱图条件的图片（高度均 <500px 或下载失败）')
   }
-  return { images, finalUrl }
+  return { images, finalUrl, title: pageTitle }
+}
+
+// Generous cap for a proxied cover/preview image — these are small, so
+// it still rejects a hostile multi-MB body from an allowlisted host.
+const MAX_PROXY_IMAGE_BYTES = 6 * 1024 * 1024
+
+// ------------------------------------------------------------
+// Thumbnail-proxy support (web import only)
+// ------------------------------------------------------------
+
+// Fetch a single image's bytes through the SSRF-guarded fetch, with a
+// site Referer (some CDNs hotlink-protect) and a size cap. Powers the
+// /api/import/thumb proxy — NOT the library grab path. `allowHost` (passed
+// by the proxy) confines every hop to the thumbnail allowlist.
+/**
+ * @param {string} url
+ * @param {{ referer?: string, dispatcher?: any, signal?: AbortSignal, allowHost?: (u: string) => boolean }} [opts]
+ * @returns {Promise<{ data: Buffer, contentType: string }>}
+ */
+export async function fetchImageBytes(url, { referer, dispatcher, signal, allowHost } = {}) {
+  const res = await safeFetch(url, {
+    headers: { 'User-Agent': UA, ...(referer ? { Referer: referer } : {}) },
+    dispatcher,
+    signal,
+    allowHost,
+  })
+  if (!res.ok) throw new Error(`图片请求失败：HTTP ${res.status}`)
+  const headerType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+  if (!headerType.startsWith('image/')) throw new Error('目标不是图片')
+
+  // Reject early if the server declares an over-cap size…
+  const declared = Number(res.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > MAX_PROXY_IMAGE_BYTES) {
+    throw new Error('图片过大')
+  }
+  // …and enforce the cap WHILE streaming, so a missing/lying Content-Length
+  // (or chunked body) still can't buffer an unbounded image into memory.
+  let data
+  const reader = res.body?.getReader?.()
+  if (!reader) {
+    data = Buffer.from(await res.arrayBuffer())
+    if (data.length > MAX_PROXY_IMAGE_BYTES) throw new Error('图片过大')
+  } else {
+    const chunks = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_PROXY_IMAGE_BYTES) {
+        await reader.cancel().catch(() => {})
+        throw new Error('图片过大')
+      }
+      chunks.push(Buffer.from(value))
+    }
+    data = Buffer.concat(chunks)
+  }
+
+  // Trust the BYTES, not the header: derive the served type from the magic
+  // number and only allow raster formats. Drops image/svg+xml (and anything
+  // mislabelled image/*) so the proxy can never serve active content.
+  const contentType = rasterMime(data)
+  if (!contentType) throw new Error('不支持的图片类型（仅 png/jpg/gif/webp）')
+  return { data, contentType }
+}
+
+// How many candidates the preview probe will download before giving up.
+// Bounds the cost of one 预览 click (most pages hit a real sheet in 1–2).
+const PREVIEW_PROBE_LIMIT = 6
+
+// Find ONE real sheet image on a tab page for the on-demand preview —
+// for sources whose result list carries no thumbnail (吉他社/易唱网).
+// Unlike collectSheetImages it doesn't pull every page: it probes
+// candidates in order (alt-semantic hits first, so the actual sheet wins
+// over sidebar/related thumbnails) and returns the first that's a real
+// sheet (tall enough, not a logo/avatar). The bytes are returned too, so
+// the caller can warm the thumb cache without a second download.
+// One page fetch + ≤6 image probes per click — never a search-time burst.
+/**
+ * @param {string} url
+ * @param {{ name?: string, dispatcher?: any, signal?: AbortSignal, allowHost?: (u: string) => boolean }} [opts]
+ * @returns {Promise<{ image: string, referer: string, data: Buffer, contentType: string }>}
+ */
+export async function findPreviewImage(url, { name = '', dispatcher, signal, allowHost } = {}) {
+  await assertPublicHttpUrl(url)
+  const { html, finalUrl } = await fetchPage(url, dispatcher, { signal })
+  if (!isBilibiliArticle(url) && detectPaywall(html)) {
+    throw new Error('付费谱，无可预览图')
+  }
+  let candidates = isBilibiliArticle(url)
+    ? extractBilibiliImages(html).map((c) => ({ ...c, url: cleanBilibiliUrl(c.url) }))
+    : dropScaledCopies(
+        extractImageCandidates(html, finalUrl)
+          .map((c) => ({ ...c, url: cleanBilibiliUrl(c.url) }))
+          .filter((c) => !NOISE.test(c.url)),
+        () => {}
+      )
+  // SSRF: image srcs are attacker-controllable — drop internal targets
+  // before the proxy is ever pointed at them.
+  const verdicts = await Promise.all(candidates.map((c) => isPublicHttpUrl(c.url)))
+  candidates = candidates.filter((_, i) => verdicts[i])
+  if (candidates.length === 0) throw new Error('没找到可预览的谱图')
+
+  // Probe semantic-alt hits (song name / "吉他谱") first, then the rest.
+  const isSemantic = (c) => (name && c.alt.includes(name)) || c.alt.includes('吉他谱')
+  const ordered = [...candidates.filter(isSemantic), ...candidates.filter((c) => !isSemantic(c))]
+  const referer = isBilibiliArticle(url) ? 'https://www.bilibili.com' : finalUrl
+
+  for (const c of ordered.slice(0, PREVIEW_PROBE_LIMIT)) {
+    try {
+      const { data, contentType } = await fetchImageBytes(c.url, { referer, dispatcher, signal, allowHost })
+      if (data.length < MIN_IMAGE_KB * 1024) continue // too small → logo/icon
+      const size = getImageSize(data)
+      if (size && size.height < MIN_SHEET_HEIGHT) continue // banner/cover, not a sheet
+      return { image: c.url, referer, data, contentType }
+    } catch {
+      // unreachable/forbidden candidate — try the next
+    }
+  }
+  throw new Error('没找到可预览的谱图')
 }

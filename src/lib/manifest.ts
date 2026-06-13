@@ -42,6 +42,18 @@ export function readManifest(): Manifest {
   }
 }
 
+// Distinct artist names already in the library — folded into the
+// title-parsing vocabulary so re-importing a known artist (even one
+// not in the hardcoded ARTISTS table) prefills with high confidence.
+export function libraryArtists(): string[] {
+  const seen = new Set<string>()
+  for (const s of readManifest().songs) {
+    const a = s.artist?.trim()
+    if (a) seen.add(a)
+  }
+  return Array.from(seen)
+}
+
 export function findSong(
   manifest: Manifest,
   category: string,

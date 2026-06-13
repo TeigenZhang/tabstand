@@ -38,13 +38,51 @@ interface Staging {
 }
 interface SearchResult {
   site: string
+  sourceId: string
   free: boolean
   title: string
   pageUrl: string
   thumbnail: string | null
+  song?: string
+  artist?: string
+  confidence?: number
+}
+// Static source catalogue (drives the filter chips + 17jita jump)
+interface SourceInfo {
+  id: string
+  site: string
+  free: boolean
+  searchable: boolean
+  external: string | null
+}
+// Per-search status returned alongside results
+interface SourceStatus {
+  id: string
+  site: string
+  ok: boolean
+  count: number
+  error?: string
 }
 
 type Tab = 'search' | 'url' | 'upload'
+
+// Confidence at/above which a parsed artist is auto-filled (below: hint only)
+const ARTIST_AUTOFILL = 0.75
+
+// Route a remote tab-site image through our caching proxy — defeats
+// hotlink protection / mixed-content and keeps the user's IP off the
+// source CDN. (See /api/import/thumb.)
+const proxiedThumb = (url: string) => `/api/import/thumb?u=${encodeURIComponent(url)}`
+
+// On-demand preview state for a result with no list thumbnail
+type PreviewState = { status: 'loading' | 'ready' | 'error'; url?: string }
+
+// Build an external search-engine URL scoped to a site (17jita has no
+// SSR-searchable endpoint, so we hand the user off to Bing site search)
+const siteSearchUrl = (host: string, query: string) =>
+  `https://www.bing.com/search?q=${encodeURIComponent(
+    `site:${host.replace(/^https?:\/\//, '')} ${query} 吉他谱`.trim()
+  )}`
 
 // Search engines as a discovery fallback when site search comes up dry
 const SEARCH_ENGINES = [
@@ -62,9 +100,11 @@ function guessSongName(title: string): string {
 
 export default function ImportPanel({
   categories,
+  sources,
   songs,
 }: {
   categories: Category[]
+  sources: SourceInfo[]
   songs: SongSummary[]
 }) {
   const router = useRouter()
@@ -79,6 +119,17 @@ export default function ImportPanel({
   const [category, setCategory] = useState(categories[0]?.key ?? 'strumming')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[] | null>(null)
+  const [sourceStatus, setSourceStatus] = useState<SourceStatus[] | null>(null)
+  // On-demand preview images keyed by pageUrl, for sources whose result
+  // list has no thumbnail (吉他社/易唱网). Fetched only on a 预览 click.
+  const [previews, setPreviews] = useState<Record<string, PreviewState>>({})
+  // pageUrls whose proxied thumbnail failed to load (e.g. an unreachable
+  // CDN) — they degrade to the on-demand 预览 button instead of a gap.
+  const [thumbErrors, setThumbErrors] = useState<Set<string>>(new Set())
+  // Which searchable sources are active. Default: all of them.
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(
+    () => new Set(sources.filter((s) => s.searchable).map((s) => s.id))
+  )
 
   // Staging / preview state
   const [staging, setStaging] = useState<Staging | null>(null)
@@ -158,7 +209,14 @@ export default function ImportPanel({
   }
 
   // --- Scrape a page into staging (URL tab + search results) ---
-  async function scrape(targetUrl: string, songName: string) {
+  // `hint` carries song/artist already parsed from a search result
+  // (with query context); the paste-URL path passes none and the
+  // server parses the page <title> instead.
+  async function scrape(
+    targetUrl: string,
+    songName: string,
+    hint?: { song?: string; artist?: string; confidence?: number }
+  ) {
     const myReq = ++reqRef.current
     setBusy(true)
     setError('')
@@ -167,15 +225,25 @@ export default function ImportPanel({
       const res = await fetch('/api/import/url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl, name: songName }),
+        body: JSON.stringify({
+          url: targetUrl,
+          name: songName,
+          songHint: hint?.song,
+          artistHint: hint?.artist,
+          confidence: hint?.confidence,
+        }),
       })
       const data = await res.json()
       if (myReq !== reqRef.current) return // superseded — drop stale result
       if (!res.ok) throw new Error(data.error ?? '抓取失败')
-      // Don't clobber a name the user has since typed — only auto-fill
-      // when the field is still empty
-      setName((cur) => (cur.trim() ? cur : songName))
-      setStaging(data)
+      // Don't clobber fields the user has since typed — only auto-fill
+      // when still empty. Artist fills only above the confidence bar.
+      const meta = data.meta as { song?: string; artist?: string; confidence?: number } | undefined
+      setName((cur) => (cur.trim() ? cur : meta?.song || songName))
+      if (meta?.artist && (meta.confidence ?? 0) >= ARTIST_AUTOFILL) {
+        setArtist((cur) => (cur.trim() ? cur : meta.artist!))
+      }
+      setStaging({ id: data.id, images: data.images })
       setExcluded(new Set())
       setConflict(null) // fresh staging voids any previous 409
     } catch (e) {
@@ -187,22 +255,65 @@ export default function ImportPanel({
     }
   }
 
-  async function runSearch() {
+  async function runSearch(srcSet: Set<string> = selectedSources) {
     if (!query.trim()) return
+    if (srcSet.size === 0) {
+      setError('请至少选择一个谱源')
+      setResults([])
+      setSourceStatus(null)
+      return
+    }
     const myReq = ++reqRef.current
     setBusy(true)
     setError('')
     setFailedUrl('') // a new search supersedes any prior failed scrape
     setResults(null)
+    setSourceStatus(null)
+    setPreviews({}) // drop stale on-demand previews from the last query
+    setThumbErrors(new Set())
     try {
-      const res = await fetch(`/api/import/search?q=${encodeURIComponent(query.trim())}`)
+      const sourcesParam = encodeURIComponent(Array.from(srcSet).join(','))
+      const res = await fetch(
+        `/api/import/search?q=${encodeURIComponent(query.trim())}&sources=${sourcesParam}`
+      )
       const data = await res.json()
       if (myReq !== reqRef.current) return
       setResults(data.results ?? [])
+      setSourceStatus(data.sources ?? null)
     } catch {
       if (myReq === reqRef.current) setError('搜索失败')
     } finally {
       if (myReq === reqRef.current) setBusy(false)
+    }
+  }
+
+  // Toggle a source on/off; re-run immediately if a search is showing
+  function toggleSource(id: string) {
+    const next = new Set(selectedSources)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setSelectedSources(next)
+    if (results !== null && query.trim()) runSearch(next)
+  }
+
+  // On-demand: fetch the first sheet image of one result (sources with no
+  // list thumbnail) and show it inline. One request per click — never a
+  // search-time burst — so it can't get the server IP rate-limited.
+  async function loadPreview(pageUrl: string) {
+    setPreviews((p) => ({ ...p, [pageUrl]: { status: 'loading' } }))
+    try {
+      const res = await fetch(`/api/import/preview?url=${encodeURIComponent(pageUrl)}`)
+      const data = await res.json()
+      if (!res.ok || !data.image) throw new Error()
+      setPreviews((p) => ({ ...p, [pageUrl]: { status: 'ready', url: data.image } }))
+      // Give the freshly-fetched preview image a clean shot at rendering
+      setThumbErrors((prev) => {
+        if (!prev.has(pageUrl)) return prev
+        const next = new Set(prev)
+        next.delete(pageUrl)
+        return next
+      })
+    } catch {
+      setPreviews((p) => ({ ...p, [pageUrl]: { status: 'error' } }))
     }
   }
 
@@ -460,14 +571,35 @@ export default function ImportPanel({
               <SearchTab
                 query={query}
                 results={results}
+                sources={sources}
+                selectedSources={selectedSources}
+                sourceStatus={sourceStatus}
+                previews={previews}
+                thumbErrors={thumbErrors}
                 busy={busy}
                 error={failedUrl ? '' : error} // failure shown in the banner above
                 onQuery={(v) => {
                   setQuery(v)
                   supersedeTarget() // drop any in-flight scrape + stale banner
                 }}
-                onSearch={runSearch}
-                onPick={(r) => scrape(r.pageUrl, guessSongName(r.title))}
+                onSearch={() => runSearch()}
+                onToggleSource={toggleSource}
+                onPreview={loadPreview}
+                onThumbError={(pageUrl) =>
+                  setThumbErrors((prev) => {
+                    if (prev.has(pageUrl)) return prev
+                    const next = new Set(prev)
+                    next.add(pageUrl)
+                    return next
+                  })
+                }
+                onPick={(r) =>
+                  scrape(r.pageUrl, r.song || guessSongName(r.title), {
+                    song: r.song,
+                    artist: r.artist,
+                    confidence: r.confidence,
+                  })
+                }
                 onMagnify={(thumb) => setLightbox({ urls: [thumb], index: 0 })}
               />
             )}
@@ -694,14 +826,24 @@ function StagingPreview(props: {
 function SearchTab(props: {
   query: string
   results: SearchResult[] | null
+  sources: SourceInfo[]
+  selectedSources: Set<string>
+  sourceStatus: SourceStatus[] | null
+  previews: Record<string, PreviewState>
+  thumbErrors: Set<string>
   busy: boolean
   error: string
   onQuery: (v: string) => void
   onSearch: () => void
+  onToggleSource: (id: string) => void
+  onPreview: (pageUrl: string) => void
+  onThumbError: (pageUrl: string) => void
   onPick: (r: SearchResult) => void
   onMagnify: (thumb: string) => void
 }) {
   const q = encodeURIComponent(props.query.trim() ? `${props.query.trim()} 吉他谱` : '')
+  const searchable = props.sources.filter((s) => s.searchable)
+  const external = props.sources.filter((s) => !s.searchable && s.external)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
@@ -720,6 +862,45 @@ function SearchTab(props: {
           {props.busy ? '搜索中…' : '搜索'}
         </button>
       </div>
+
+      {/* Source filter: toggle which sites to search. 17jita can't be
+          SSR-searched (nginx-blocked), so it's a站外搜索 jump instead. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-stone-500">谱源</span>
+        {searchable.map((s) => {
+          const on = props.selectedSources.has(s.id)
+          const st = props.sourceStatus?.find((x) => x.id === s.id)
+          const note = st ? (!st.ok ? ` ·${st.error ?? '失败'}` : st.count === 0 ? ' ·0' : '') : ''
+          return (
+            <button
+              key={s.id}
+              onClick={() => props.onToggleSource(s.id)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                on
+                  ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                  : 'border-stone-700 text-stone-500 hover:text-stone-300'
+              }`}
+            >
+              {s.site}
+              {!s.free && <span className="text-[10px] text-amber-500/70">付</span>}
+              {note && <span className="text-stone-500">{note}</span>}
+            </button>
+          )
+        })}
+        {external.map((s) => (
+          <a
+            key={s.id}
+            href={siteSearchUrl(s.external!, props.query.trim())}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="站内搜不到？去站外搜，找到谱页后用「贴网址」抓取"
+            className="rounded-full border border-dashed border-stone-600 px-2.5 py-0.5 text-xs text-stone-400 hover:border-stone-400 hover:text-stone-200"
+          >
+            {s.site} ↗
+          </a>
+        ))}
+      </div>
+
       {props.error && <p className="text-sm text-red-400">{props.error}</p>}
 
       {props.results && props.results.length === 0 && (
@@ -727,26 +908,69 @@ function SearchTab(props: {
       )}
       {props.results && props.results.length > 0 && (
         <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto">
-          {props.results.map((r) => (
+          {props.results.map((r) => {
+            const pv = props.previews[r.pageUrl]
+            // A ready on-demand preview WINS over a list thumbnail: the user
+            // only fetches one when the list thumbnail is absent or broke, so
+            // it must not be shadowed by the same failing r.thumbnail.
+            const previewUrl = pv?.status === 'ready' ? pv.url ?? null : null
+            const thumbUrl = previewUrl ?? (r.thumbnail ? proxiedThumb(r.thumbnail) : null)
+            // A thumbnail that failed to load (unreachable CDN, hotlink
+            // block) degrades to the 预览 button rather than an empty gap.
+            const showThumb = thumbUrl && !props.thumbErrors.has(r.pageUrl)
+            return (
             <li key={r.pageUrl} className="flex items-center gap-3 rounded-lg border border-stone-800 p-2 hover:bg-stone-800/60">
-              {r.thumbnail ? (
-                <button onClick={() => props.onMagnify(r.thumbnail!)} aria-label="放大查看" className="group relative shrink-0">
+              {showThumb ? (
+                <button onClick={() => props.onMagnify(thumbUrl)} aria-label="放大查看" className="group relative shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={r.thumbnail}
+                    src={thumbUrl}
                     alt=""
                     loading="lazy"
                     className="h-14 w-20 rounded bg-white object-cover object-top"
-                    onError={(e) => (e.currentTarget.style.visibility = 'hidden')}
+                    onError={() => props.onThumbError(r.pageUrl)}
                   />
                   <span className="absolute inset-0 flex items-center justify-center rounded text-transparent transition-colors group-hover:bg-black/40 group-hover:text-white">
                     🔍
                   </span>
                 </button>
               ) : (
-                <span className="flex h-14 w-20 shrink-0 items-center justify-center rounded bg-stone-800 text-xs text-stone-500">
-                  {r.site}
-                </span>
+                // No list thumbnail (吉他社/易唱网) — fetch the first sheet
+                // image on demand. One request per click, only if the user
+                // wants a peek before committing to a full scrape.
+                <button
+                  onClick={() => props.onPreview(r.pageUrl)}
+                  disabled={pv?.status === 'loading'}
+                  title="抓取这条的首张谱图预览一眼"
+                  className="group flex h-14 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded bg-stone-800 text-[10px] text-stone-400 hover:bg-stone-700 disabled:opacity-70"
+                >
+                  {pv?.status === 'loading' ? (
+                    <span className="animate-pulse">取图中…</span>
+                  ) : pv?.status === 'error' ? (
+                    <>
+                      <span className="text-stone-500">{r.site}</span>
+                      <span className="text-amber-400">↻ 重试</span>
+                    </>
+                  ) : (
+                    <>
+                      {/* picture icon — calmer than an eye, and semantically
+                          "peek at the sheet image" */}
+                      <svg
+                        className="h-4 w-4 text-stone-500 transition-colors group-hover:text-stone-300"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.7}
+                        aria-hidden="true"
+                      >
+                        <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+                        <circle cx="8.5" cy="10" r="1.5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4 16.5 4.2-4.2a1.5 1.5 0 0 1 2.1 0L15 17m-1.5-2.5 1.7-1.7a1.5 1.5 0 0 1 2.1 0L20 15" />
+                      </svg>
+                      <span>预览</span>
+                    </>
+                  )}
+                </button>
               )}
               <button onClick={() => props.onPick(r)} disabled={props.busy} className="min-w-0 flex-1 text-left disabled:opacity-50">
                 <span className="block truncate text-sm text-stone-200">{r.title}</span>
@@ -767,7 +991,8 @@ function SearchTab(props: {
                 打开 ↗
               </a>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
 
