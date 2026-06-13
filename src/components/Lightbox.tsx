@@ -4,8 +4,9 @@ import { useEffect } from 'react'
 
 // ============================================================
 // Lightbox — full-screen viewer for staged/search/library images.
-// Tab pages are tall, so the image scrolls vertically. Esc to
-// close, ← / → to move between pages.
+// Tab pages are tall, so the image scrolls vertically (wheel/trackpad).
+// Click the image (or backdrop) to close, Esc to close, ← / → to move
+// between pages. Nav arrows stopPropagation so they don't also close.
 // ============================================================
 
 export default function Lightbox({
@@ -49,9 +50,16 @@ export default function Lightbox({
             ‹
           </button>
         )}
-        <div className="h-full flex-1 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* No stopPropagation here: a click on the image bubbles to the
+            overlay's onClose. Scrolling a tall page uses the wheel, so
+            it isn't affected. cursor-zoom-out is the only affordance. */}
+        <div className="h-full flex-1 overflow-y-auto">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={urls[index]} alt="" className="mx-auto max-w-full rounded bg-white" />
+          <img
+            src={urls[index]}
+            alt=""
+            className="mx-auto max-w-full cursor-zoom-out rounded bg-white"
+          />
         </div>
         {multi && (
           <button
