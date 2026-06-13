@@ -671,6 +671,12 @@ function StagingPreview(props: {
 }) {
   const { staging, excluded } = props
   const kept = staging.images.length - excluded.size
+  // A song with this title is already in the library and no version
+  // name is typed yet → offer the song-level fork (separate song /
+  // arrangement / append) instead of a generic commit. A version-level
+  // 409 supersedes it (handled by its own block).
+  const sameTitleFork =
+    props.existing !== null && !props.version.trim() && props.conflict === null
   return (
     <div>
       <p className="mb-1 text-sm text-stone-400">
@@ -773,29 +779,28 @@ function StagingPreview(props: {
           />
         </div>
 
-        {/* Pre-commit hint: the song already exists */}
-        {props.existing && !props.version.trim() && props.conflict === null && (
-          <p className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300/90">
-            ⚠️ 库里已有《{props.name.trim()}》（{props.existing.pages} 页
-            {props.existing.versions > 0 ? ` · ${props.existing.versions} 个版本` : ''}
-            ）。若这是另一个编配，填个版本名；直接入库会再次确认。
-          </p>
-        )}
-
-        {/* 409 from commit: choose append / version / keep editing */}
-        {props.conflict !== null && (
+        {/* Same-title fork — shown UP FRONT (no need to commit first and
+            get rejected). The library already has a song by this title:
+            is the user adding a different song that shares the name, a
+            new arrangement, or more pages of the same sheet? Suppressed
+            once a version name is typed (→ that's the arrangement path)
+            or a version-level 409 is in play. */}
+        {sameTitleFork && (
           <div className="flex flex-col gap-2 rounded-lg border border-amber-700/40 bg-amber-950/30 p-3">
             <p className="text-xs text-amber-200/90">
-              ⚠️ 库里已有同名《{props.name.trim()}》（{props.conflict} 页）。这是…？
+              ⚠️ 库里已有《{props.name.trim()}》（{props.existing!.pages} 页
+              {props.existing!.versions > 0 ? ` · ${props.existing!.versions} 个版本` : ''}
+              ）。这是…？
             </p>
-            {/* Same title, different song (e.g. 不同歌手的同名歌) — the
-                primary intent here. Lands as a separate entry. */}
+            {/* Different song that happens to share the title (e.g. 不同
+                歌手的同名歌) — the primary intent. Lands as a separate
+                entry in a disambiguated dir. */}
             <button
               onClick={props.onNewSong}
               disabled={props.busy}
               className="rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
             >
-              另一首同名歌（如不同歌手）— 单独入库
+              {props.busy ? '入库中…' : '另一首同名歌（如不同歌手）— 单独入库'}
             </button>
             <div className="flex gap-2">
               <button
@@ -813,27 +818,59 @@ function StagingPreview(props: {
                 同一份的后续页 — 追加
               </button>
             </div>
-            {props.artist.trim() && (
-              <p className="text-[11px] text-stone-500">
-                「单独入库」会存到「{props.name.trim()} ({props.artist.trim()})」目录，列表仍显示《{props.name.trim()}》
-              </p>
-            )}
+            <p className="text-[11px] text-stone-500">
+              「单独入库」会存到「{props.name.trim()}
+              {props.artist.trim() ? ` (${props.artist.trim()})` : ' (2)'}」目录，列表仍显示《{props.name.trim()}》
+            </p>
+          </div>
+        )}
+
+        {/* Version-level 409: the chosen version name already has pages.
+            Song-level collisions are handled by the fork above, so this
+            only covers re-importing into an existing version. */}
+        {props.conflict !== null && (
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-700/40 bg-amber-950/30 p-3">
+            <p className="text-xs text-amber-200/90">
+              ⚠️ 版本「{props.version.trim()}」已有 {props.conflict} 页。追加会把两份谱接在一起；不同编配建议换个版本名。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => props.versionInputRef.current?.focus()}
+                disabled={props.busy}
+                className="flex-1 rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+              >
+                换个版本名
+              </button>
+              <button
+                onClick={props.onAppend}
+                disabled={props.busy}
+                className="flex-1 rounded-lg border border-stone-600 py-2 text-sm text-stone-200 hover:bg-stone-800 disabled:opacity-50"
+              >
+                仍然追加到后面
+              </button>
+            </div>
           </div>
         )}
 
         {props.error && <p className="text-sm text-red-400">{props.error}</p>}
         <div className="flex gap-2">
-          <button
-            onClick={props.onCommit}
-            disabled={props.busy}
-            className="flex-1 rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
-          >
-            {props.busy ? '入库中…' : '确认入库'}
-          </button>
+          {/* The fork owns the commit when a same-title song exists —
+              hide the generic button so there's one clear path */}
+          {!sameTitleFork && (
+            <button
+              onClick={props.onCommit}
+              disabled={props.busy}
+              className="flex-1 rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+            >
+              {props.busy ? '入库中…' : '确认入库'}
+            </button>
+          )}
           <button
             onClick={props.onDiscard}
             disabled={props.busy}
-            className="rounded-lg border border-stone-700 px-4 py-2 text-sm text-stone-300 hover:bg-stone-800"
+            className={`rounded-lg border border-stone-700 px-4 py-2 text-sm text-stone-300 hover:bg-stone-800 ${
+              sameTitleFork ? 'flex-1' : ''
+            }`}
           >
             丢弃
           </button>
