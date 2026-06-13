@@ -266,7 +266,7 @@ export function reorderVersions(opts: {
 }
 
 // Turn the main sheet into a named version (the song becomes
-// version-only). This is how a mislabeled "原版" gets a real name.
+// version-only). This is how a mislabeled "默认" gets a real name.
 export function demoteMain(opts: {
   category: string
   name: string
@@ -324,7 +324,7 @@ export function promoteVersion(opts: {
     }
     demoted = safeSegment(opts.demoteTo)
     if (demoted === versionName) {
-      throw new Error('新版本名不能与被设为原版的版本同名')
+      throw new Error('新版本名不能与被设为默认的版本同名')
     }
     const demotedDir = pageDir(opts.category, opts.name, demoted)
     if (fs.existsSync(demotedDir)) {

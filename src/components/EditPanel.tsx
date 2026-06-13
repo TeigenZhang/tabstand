@@ -53,11 +53,13 @@ export default function EditPanel({
   const [error, setError] = useState('')
   const [splitName, setSplitName] = useState('')
   const [renameName, setRenameName] = useState('')
-  const [renameVer, setRenameVer] = useState('')
   const [artistValue, setArtistValue] = useState(artist)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [verOrder, setVerOrder] = useState<string[]>(() => versions)
   const [demoteName, setDemoteName] = useState('')
+  // Inline rename in the version list: which version is being edited + its draft name
+  const [editingVer, setEditingVer] = useState<string | null>(null)
+  const [editVerName, setEditVerName] = useState('')
 
   // Re-sync local state whenever the server-rendered page list changes
   // (after a refresh every surviving page has been renumbered)
@@ -70,7 +72,10 @@ export default function EditPanel({
   useEffect(() => setArtistValue(artist), [artist])
 
   // And for the version list after reorder / promote / rename
-  useEffect(() => setVerOrder(versions), [versions])
+  useEffect(() => {
+    setVerOrder(versions)
+    setEditingVer(null) // a server round-trip ends any in-progress rename
+  }, [versions])
 
   const urlByFile = useMemo(() => new Map(pages.map((p) => [p.file, p.url])), [pages])
   const baseUrl = `/song/${category}/${encodeURIComponent(name)}`
@@ -105,10 +110,10 @@ export default function EditPanel({
     setError('')
     setSplitName('')
     setRenameName('')
-    setRenameVer('')
     setArtistValue(artist)
     setVerOrder(versions)
     setDemoteName('')
+    setEditingVer(null)
   }
 
   // One mutate call against /api/library; null means failure (error
@@ -223,16 +228,16 @@ export default function EditPanel({
     let demoteTo: string | null = null
     if (mainPages > 0) {
       const input = window.prompt(
-        `把「${v}」设为原版后，现在的原版（${mainPages} 页）会保存为一个版本。\n给它起个版本名：`,
+        `把「${v}」设为默认后，现在的默认（${mainPages} 页）会保存为一个版本。\n给它起个版本名：`,
         ''
       )
       if (input === null) return
       demoteTo = input.trim()
       if (!demoteTo) {
-        setError('需要给当前原版填一个版本名')
+        setError('需要给当前默认填一个版本名')
         return
       }
-    } else if (!window.confirm(`确定把「${v}」设为原版（主谱）？`)) {
+    } else if (!window.confirm(`确定把「${v}」设为默认（主谱）？`)) {
       return
     }
     const data = await post({ op: 'promoteVersion', version: v, demoteTo })
@@ -274,15 +279,28 @@ export default function EditPanel({
     )
   }
 
-  async function doRenameVersion() {
-    const newVersion = renameVer.trim()
-    if (!version || !newVersion) {
-      setError('请填写新版本名')
+  // Inline rename in the version list (in-app styled — no native prompt).
+  const startRename = (v: string) => {
+    setEditingVer(v)
+    setEditVerName(v)
+    setError('')
+  }
+  const cancelRename = () => setEditingVer(null)
+
+  // Commit the inline rename. Follows the rename if it's the version we're
+  // currently viewing; otherwise just refreshes the list in place.
+  async function commitRename() {
+    const v = editingVer
+    const newVersion = editVerName.trim()
+    if (!v) return
+    if (!newVersion || newVersion === v) {
+      setEditingVer(null)
       return
     }
-    const data = await post({ op: 'renameVersion', version, newVersion })
+    const data = await post({ op: 'renameVersion', version: v, newVersion })
     if (!data) return
-    go(`${baseUrl}/v/${encodeURIComponent(data.newVersion)}`)
+    setEditingVer(null)
+    go(version === v ? `${baseUrl}/v/${encodeURIComponent(data.newVersion)}` : undefined)
   }
 
   async function doDelete() {
@@ -458,13 +476,13 @@ export default function EditPanel({
           <div className="flex flex-col gap-2 border-t border-stone-800 p-3">
             <p className="text-xs text-stone-500">
               ↑↓ 调版本展示顺序（排第一的作为封面与默认打开）。
-              「设为原版」与主谱整体互换。
+              「设为默认」与主谱整体互换。
             </p>
 
             {mainPages > 0 && (
               <div className="flex items-center gap-2 rounded-lg bg-stone-900/60 px-3 py-2">
                 <span className="flex-1 truncate text-sm text-stone-200">
-                  原版（主谱）
+                  默认（主谱）
                 </span>
                 <span className="font-tuner text-xs text-stone-500">
                   {mainPages}页 · 始终第一
@@ -479,32 +497,72 @@ export default function EditPanel({
                   v === version ? 'bg-amber-500/10 ring-1 ring-inset ring-amber-500/30' : 'bg-stone-900/60'
                 }`}
               >
-                <span className="flex-1 truncate text-sm text-stone-200" title={v}>
-                  {v}
-                </span>
-                <button
-                  onClick={() => moveVersion(v, -1)}
-                  disabled={busy || i === 0}
-                  aria-label="上移"
-                  className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-800 text-stone-300 hover:bg-stone-700 disabled:opacity-30"
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => moveVersion(v, 1)}
-                  disabled={busy || i === verOrder.length - 1}
-                  aria-label="下移"
-                  className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-800 text-stone-300 hover:bg-stone-700 disabled:opacity-30"
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => promoteToMain(v)}
-                  disabled={busy}
-                  className="whitespace-nowrap rounded-md border border-stone-600 px-2 py-1 text-xs text-stone-200 hover:bg-stone-800 disabled:opacity-50"
-                >
-                  设为原版
-                </button>
+                {editingVer === v ? (
+                  // Inline rename — in-app styled, Enter saves / Esc cancels
+                  <>
+                    <input
+                      value={editVerName}
+                      onChange={(e) => setEditVerName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRename()
+                        else if (e.key === 'Escape') cancelRename()
+                      }}
+                      autoFocus
+                      placeholder="新版本名"
+                      className="field flex-1 py-1 text-sm"
+                    />
+                    <button
+                      onClick={commitRename}
+                      disabled={busy || !editVerName.trim() || editVerName.trim() === v}
+                      className="whitespace-nowrap rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={cancelRename}
+                      disabled={busy}
+                      className="whitespace-nowrap rounded-md border border-stone-600 px-2 py-1 text-xs text-stone-300 hover:bg-stone-800 disabled:opacity-50"
+                    >
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 truncate text-sm text-stone-200" title={v}>
+                      {v}
+                    </span>
+                    <button
+                      onClick={() => moveVersion(v, -1)}
+                      disabled={busy || i === 0}
+                      aria-label="上移"
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-800 text-stone-300 hover:bg-stone-700 disabled:opacity-30"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moveVersion(v, 1)}
+                      disabled={busy || i === verOrder.length - 1}
+                      aria-label="下移"
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-800 text-stone-300 hover:bg-stone-700 disabled:opacity-30"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      onClick={() => startRename(v)}
+                      disabled={busy}
+                      className="whitespace-nowrap rounded-md border border-stone-600 px-2 py-1 text-xs text-stone-200 hover:bg-stone-800 disabled:opacity-50"
+                    >
+                      改名
+                    </button>
+                    <button
+                      onClick={() => promoteToMain(v)}
+                      disabled={busy}
+                      className="whitespace-nowrap rounded-md border border-stone-600 px-2 py-1 text-xs text-stone-200 hover:bg-stone-800 disabled:opacity-50"
+                    >
+                      设为默认
+                    </button>
+                  </>
+                )}
               </div>
             ))}
 
@@ -523,7 +581,7 @@ export default function EditPanel({
                 <input
                   value={demoteName}
                   onChange={(e) => setDemoteName(e.target.value)}
-                  placeholder="原版转为版本，填版本名"
+                  placeholder="默认转为版本，填版本名"
                   className="field flex-1"
                 />
                 <button
@@ -574,23 +632,6 @@ export default function EditPanel({
                 改歌名
               </button>
             </div>
-            {version && (
-              <div className="flex gap-2">
-                <input
-                  value={renameVer}
-                  onChange={(e) => setRenameVer(e.target.value)}
-                  placeholder={`新版本名（当前：${version}）`}
-                  className="field flex-1"
-                />
-                <button
-                  onClick={doRenameVersion}
-                  disabled={busy || !renameVer.trim()}
-                  className="whitespace-nowrap rounded-lg border border-stone-600 px-3 py-2 text-sm text-stone-200 hover:bg-stone-800 disabled:opacity-50"
-                >
-                  改版本名
-                </button>
-              </div>
-            )}
             <button
               onClick={doDelete}
               disabled={busy}

@@ -92,7 +92,7 @@ export default function SongPage({ params }: Props) {
                     : 'text-stone-400 hover:bg-stone-800'
                 }`}
               >
-                原版
+                默认
               </Link>
             )}
             {song.versions.map((v) => (
