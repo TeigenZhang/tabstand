@@ -104,6 +104,17 @@ function scanCategory({ key, label }) {
       const meta = readMeta(songDir)
       const artist = typeof meta.artist === 'string' ? meta.artist.trim() : ''
 
+      // Display title vs identity: the directory name is the song's
+      // permanent identity (URL slug, edit-op key, filesystem
+      // uniqueness). meta.title — set only when two songs share a
+      // title (e.g.《姑娘》by 陈楚生 and 隔壁老樊) and the second must
+      // live in a disambiguated dir like「姑娘 (隔壁老樊)」— is the
+      // human-facing name. Falls back to the dir name when unset.
+      const title =
+        typeof meta.title === 'string' && meta.title.trim()
+          ? meta.title.trim()
+          : songName
+
       // meta.versionOrder pins the display order: listed names first
       // (in that order), unlisted ones after, natural-sorted. The
       // first version doubles as cover / default open for songs
@@ -130,11 +141,14 @@ function scanCategory({ key, label }) {
 
       return {
         rev,
-        name: songName,
+        name: songName, // directory name — identity / URL slug
+        title, // human-facing name (meta.title || songName)
         category: key,
         categoryLabel: label,
-        pinyin: toFullPinyin(songName),
-        initials: toInitials(songName),
+        // Search indexes the DISPLAY title, so typing「姑娘」still
+        // finds a song whose dir is「姑娘 (隔壁老樊)」
+        pinyin: toFullPinyin(title),
+        initials: toInitials(title),
         artist,
         artistPinyin: artist ? toFullPinyin(artist) : '',
         artistInitials: artist ? toInitials(artist) : '',

@@ -69,7 +69,7 @@ export default function SongPage({ params }: Props) {
 
   return (
     <SheetViewer
-      title={versionName ? `${song.name} · ${versionName}` : song.name}
+      title={versionName ? `${song.title} · ${versionName}` : song.title}
       imageUrls={imageUrls}
       leading={
         <Link
@@ -116,6 +116,7 @@ export default function SongPage({ params }: Props) {
         <EditPanel
           category={song.category}
           name={song.name}
+          title={song.title}
           artist={song.artist ?? ''}
           version={versionName}
           pages={pages.map((p, i) => ({ file: p, url: imageUrls[i] }))}

@@ -145,6 +145,37 @@ export function sweepStaging(maxAgeMs = STAGING_TTL_MS): void {
 // Commit: move staged images into the library
 // ------------------------------------------------------------
 
+// Pick a fresh, path-safe directory name for a NEW song whose title
+// collides with one already in the library — the same-title /
+// different-artist case (《姑娘》by 陈楚生 vs 隔壁老樊). Prefers
+//「<title> (<artist>)」, falls back to「<title> (2)」, (3)…. The
+// clean title is preserved separately in meta.title.
+function uniqueSongDir(category: string, title: string, artist?: string): string {
+  const exists = (dirName: string) =>
+    fs.existsSync(path.join(LIBRARY_DIR, category, dirName))
+
+  if (!exists(title)) return title
+
+  const a = artist?.trim()
+  if (a) {
+    const withArtist = `${title} (${a})`
+    // The artist is free-form content; only use it as a path segment
+    // when it's actually safe (no slashes / dot-prefix / ..)
+    try {
+      safeSegment(withArtist)
+      if (!exists(withArtist)) return withArtist
+    } catch {
+      // fall through to the numeric scheme
+    }
+  }
+
+  for (let i = 2; i < 1000; i++) {
+    const cand = `${title} (${i})`
+    if (!exists(cand)) return cand
+  }
+  throw new Error('无法为同名歌生成唯一目录，名字太多了')
+}
+
 export function commitStaging(opts: {
   id: string
   category: string
@@ -152,10 +183,13 @@ export function commitStaging(opts: {
   version?: string
   artist?: string // song-level metadata, written to <songDir>/meta.json
   files?: string[] // whitelist of staged filenames to keep (default: all)
-  mode?: 'append' // explicit consent to add after an existing song's pages
+  // 'append' — consent to add after an existing song's pages.
+  // 'newsong' — a distinct song that happens to share the title;
+  //   lands in a disambiguated dir with the clean title in meta.json.
+  mode?: 'append' | 'newsong'
 }): { targetDir: string; count: number } {
   const category = assertCategory(opts.category)
-  const name = safeSegment(opts.name)
+  const title = safeSegment(opts.name) // typed name = display title
   const version = opts.version ? safeSegment(opts.version) : null
 
   const source = stagingPath(opts.id)
@@ -180,19 +214,31 @@ export function commitStaging(opts: {
   }
   if (staged.length === 0) throw new Error('没有选中任何页，无法入库')
 
-  const songDir = path.join(LIBRARY_DIR, category, name)
-  const targetDir = version ? path.join(songDir, 'versions', version) : songDir
+  // 'newsong' forces a distinct song even though the title collides —
+  // a separate dir (disambiguated), main sheet only (a brand-new song
+  // doesn't start life as someone else's version).
+  const isNewSong = opts.mode === 'newsong'
+  const dirName = isNewSong ? uniqueSongDir(category, title, opts.artist) : title
+  const songDir = path.join(LIBRARY_DIR, category, dirName)
+  const targetDir = version && !isNewSong ? path.join(songDir, 'versions', version) : songDir
 
   // The target already has pages → don't silently interleave two
   // arrangements (the 漠河舞厅 incident). The UI offers an explicit
-  // choice: append anyway, or commit under a version name.
+  // choice: append anyway, commit under a version name, or — for a
+  // same-title-different-song — land it as 另一首歌 ('newsong').
   const existingPages = listImages(targetDir).length
-  if (existingPages > 0 && opts.mode !== 'append') {
-    throw new CommitConflictError(version ? `${name} · ${version}` : name, existingPages)
+  if (existingPages > 0 && opts.mode !== 'append' && !isNewSong) {
+    throw new CommitConflictError(version ? `${title} · ${version}` : title, existingPages)
   }
 
   appendImages(targetDir, staged.map((file) => path.join(source, file)))
 
+  // Record the clean display title only when the dir had to be
+  // disambiguated (dir name ≠ title); otherwise the dir name IS the
+  // title and meta.title would be redundant.
+  if (dirName !== title) {
+    writeSongMeta(songDir, { title })
+  }
   // Artist is song-level (not per version) — write it only when the
   // user actually typed one, so re-imports can't blank existing meta
   if (typeof opts.artist === 'string' && opts.artist.trim()) {

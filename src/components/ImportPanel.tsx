@@ -23,6 +23,7 @@ interface Category {
 interface SongSummary {
   category: string
   name: string
+  title: string
   pages: number
   versions: number
 }
@@ -146,9 +147,16 @@ export default function ImportPanel({
   // The song this commit would land on, if it already exists —
   // drives the "already in the library" hint in the preview
   const existing = useMemo(
-    () =>
-      songs.find((s) => s.category === category && s.name === name.trim()) ??
-      null,
+    () => {
+      const n = name.trim()
+      // Match the dir name OR the display title — a same-titled song
+      // already in a disambiguated dir should still trip the hint
+      return (
+        songs.find(
+          (s) => s.category === category && (s.name === n || s.title === n)
+        ) ?? null
+      )
+    },
     [songs, category, name]
   )
   // Sequence guard: each async action takes a token; a stale response
@@ -343,7 +351,7 @@ export default function ImportPanel({
     }
   }
 
-  async function commit(mode?: 'append') {
+  async function commit(mode?: 'append' | 'newsong') {
     if (!staging || !name.trim()) {
       setError('请填写歌名')
       return
@@ -563,6 +571,7 @@ export default function ImportPanel({
             }}
             onCommit={() => commit()}
             onAppend={() => commit('append')}
+            onNewSong={() => commit('newsong')}
             onDiscard={discard}
           />
         ) : (
@@ -657,6 +666,7 @@ function StagingPreview(props: {
   onCategory: (v: string) => void
   onCommit: () => void
   onAppend: () => void
+  onNewSong: () => void
   onDiscard: () => void
 }) {
   const { staging, excluded } = props
@@ -776,25 +786,38 @@ function StagingPreview(props: {
         {props.conflict !== null && (
           <div className="flex flex-col gap-2 rounded-lg border border-amber-700/40 bg-amber-950/30 p-3">
             <p className="text-xs text-amber-200/90">
-              ⚠️ 目标已有 {props.conflict} 页。直接追加会把两份谱混在一起——
-              如果这是另一个编配，建议填版本名分开存。
+              ⚠️ 库里已有同名《{props.name.trim()}》（{props.conflict} 页）。这是…？
             </p>
+            {/* Same title, different song (e.g. 不同歌手的同名歌) — the
+                primary intent here. Lands as a separate entry. */}
+            <button
+              onClick={props.onNewSong}
+              disabled={props.busy}
+              className="rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+            >
+              另一首同名歌（如不同歌手）— 单独入库
+            </button>
             <div className="flex gap-2">
               <button
                 onClick={() => props.versionInputRef.current?.focus()}
                 disabled={props.busy}
-                className="flex-1 rounded-lg bg-amber-500 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-stone-600 py-2 text-sm text-stone-200 hover:bg-stone-800 disabled:opacity-50"
               >
-                填版本名分开存
+                同一首的另一编配 — 填版本名
               </button>
               <button
                 onClick={props.onAppend}
                 disabled={props.busy}
                 className="flex-1 rounded-lg border border-stone-600 py-2 text-sm text-stone-200 hover:bg-stone-800 disabled:opacity-50"
               >
-                仍然追加到后面
+                同一份的后续页 — 追加
               </button>
             </div>
+            {props.artist.trim() && (
+              <p className="text-[11px] text-stone-500">
+                「单独入库」会存到「{props.name.trim()} ({props.artist.trim()})」目录，列表仍显示《{props.name.trim()}》
+              </p>
+            )}
           </div>
         )}
 

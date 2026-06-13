@@ -24,7 +24,8 @@ interface PageItem {
 
 interface Props {
   category: string
-  name: string
+  name: string // directory name — identity, used by every edit op
+  title: string // human-facing name (may differ from name)
   artist: string
   version: string | null
   pages: PageItem[]
@@ -38,6 +39,7 @@ interface Props {
 export default function EditPanel({
   category,
   name,
+  title,
   artist,
   version,
   pages,
@@ -273,8 +275,10 @@ export default function EditPanel({
     }
     const data = await post({ op: 'renameSong', newName })
     if (!data) return
+    // A title-only rename (the target name belongs to another song)
+    // keeps the folder — navigate to data.slug, which is unchanged then
     go(
-      `/song/${category}/${encodeURIComponent(data.newName)}` +
+      `/song/${category}/${encodeURIComponent(data.slug)}` +
         (version ? `/v/${encodeURIComponent(version)}` : '')
     )
   }
@@ -311,7 +315,7 @@ export default function EditPanel({
       go(data.songRemains ? baseUrl : '/')
     } else {
       const suffix = hasVersions ? '（含所有版本）' : ''
-      if (!window.confirm(`确定删除整首「${name}」${suffix}？进回收站，保留 7 天`)) return
+      if (!window.confirm(`确定删除整首「${title}」${suffix}？进回收站，保留 7 天`)) return
       const data = await post({ op: 'deleteSong' })
       if (!data) return
       go('/')
@@ -349,7 +353,7 @@ export default function EditPanel({
       <div className="modal-card max-w-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="truncate text-lg font-semibold">
-            编辑「{name}
+            编辑「{title}
             {version ? ` · ${version}` : ''}」
           </h2>
           <button onClick={close} className="text-stone-400 transition-colors hover:text-stone-100" aria-label="关闭">
@@ -621,7 +625,7 @@ export default function EditPanel({
               <input
                 value={renameName}
                 onChange={(e) => setRenameName(e.target.value)}
-                placeholder={`新歌名（当前：${name}）`}
+                placeholder={`新歌名（当前：${title}）`}
                 className="field flex-1"
               />
               <button

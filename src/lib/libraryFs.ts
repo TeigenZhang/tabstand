@@ -119,6 +119,10 @@ export function appendImages(dir: string, files: string[]): void {
 
 export interface SongMeta {
   artist?: string
+  /** Human-facing title, overriding the directory name. Set only when
+   *  two songs share a title and the second lives in a disambiguated
+   *  dir (「姑娘 (隔壁老樊)」). Display falls back to the dir name. */
+  title?: string
   /** Preferred display order of versions/<name> dirs; names not
    *  listed sort after these, naturally. First one is the song's
    *  default arrangement when the main sheet is empty. */
@@ -143,6 +147,10 @@ export function writeSongMeta(songDir: string, patch: SongMeta): void {
   const merged: SongMeta = { ...readSongMeta(songDir), ...patch }
   if (!merged.artist?.trim()) delete merged.artist
   else merged.artist = merged.artist.trim()
+
+  // Blank title removes the key — display falls back to the dir name
+  if (!merged.title?.trim()) delete merged.title
+  else merged.title = merged.title.trim()
 
   const order = Array.isArray(merged.versionOrder)
     ? merged.versionOrder.filter((v) => typeof v === 'string' && v.trim())

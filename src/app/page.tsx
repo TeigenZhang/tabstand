@@ -38,6 +38,7 @@ export default function HomePage() {
           songs={manifest.songs.map((s) => ({
             category: s.category,
             name: s.name,
+            title: s.title,
             pages: s.pages.length,
             versions: s.versions.length,
           }))}

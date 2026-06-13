@@ -13,7 +13,8 @@ export interface Version {
 
 export interface Song {
   rev: number // newest page mtime — cache-buster for cover/page URLs
-  name: string
+  name: string // directory name — identity / URL slug
+  title: string // human-facing name (meta.title || name)
   category: string
   categoryLabel: string
   pinyin: string

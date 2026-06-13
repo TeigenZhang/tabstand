@@ -35,8 +35,9 @@ function matches(song: Song, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   // Direct substring match works for Chinese (e.g. 「这」), and
-  // covers the artist too (e.g. 「周杰伦」 lists all his songs)
-  if (song.name.toLowerCase().includes(q)) return true
+  // covers the artist too (e.g. 「周杰伦」 lists all his songs).
+  // Match the DISPLAY title, not the (possibly disambiguated) dir name.
+  if (song.title.toLowerCase().includes(q)) return true
   if (song.artist && song.artist.toLowerCase().includes(q)) return true
   // Pinyin / initials only apply to latin input — a Chinese query
   // normalizes to '' and includes('') is always true, which would
@@ -253,7 +254,7 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={cover}
-                        alt={song.name}
+                        alt={song.title}
                         loading="lazy"
                         className="h-full w-full bg-white object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]"
                       />
@@ -271,7 +272,7 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
                   </div>
                   <div className="px-2.5 py-2">
                     <span className="block truncate text-sm font-medium text-stone-100 transition-colors group-hover:text-amber-300">
-                      {song.name}
+                      {song.title}
                     </span>
                     {(song.artist || versions > 1) && (
                       <span className="mt-0.5 block truncate text-xs text-stone-500">

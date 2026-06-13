@@ -357,21 +357,46 @@ export function promoteVersion(opts: {
 // Rename / delete
 // ------------------------------------------------------------
 
+// Rename a song. Two outcomes, chosen by whether the target dir is
+// free:
+//  - Free → rename the directory (identity + URL slug move with it).
+//    A now-redundant meta.title (matching the new dir name) is dropped
+//    so display follows the folder.
+//  - Taken by ANOTHER song → the folder can't move, so this becomes a
+//    DISPLAY-title change: keep the folder, record the (colliding)
+//    title in meta.json. That's the same-title / different-artist
+//    case — two songs may now share a title, told apart by artist.
+// `slug` is the dir name to navigate to (unchanged in the title-only
+// branch); `titleOnly` tells the client the URL didn't move.
 export function renameSong(opts: {
   category: string
   name: string
   newName: string
-}): { newName: string } {
+}): { newName: string; slug: string; titleOnly: boolean } {
   const from = pageDir(opts.category, opts.name)
   assertExists(from)
-  const newName = safeSegment(opts.newName)
-  const to = pageDir(opts.category, newName)
-  if (from !== to && fs.existsSync(to) && !isSameDir(from, to)) {
-    throw new Error(`已存在同名歌「${newName}」`)
+  const title = typeof opts.newName === 'string' ? opts.newName.trim() : ''
+  if (!title) throw new Error('请填写新歌名')
+
+  const target = safeSegment(opts.newName)
+  const to = pageDir(opts.category, target)
+
+  // Target free (or it's the same dir, e.g. a case-only change) → move
+  if (from === to || !fs.existsSync(to) || isSameDir(from, to)) {
+    fs.renameSync(from, to)
+    // The folder now spells the title — a stored meta.title that just
+    // duplicates it is dead weight; clear it.
+    if (readSongMeta(to).title?.trim() === target) {
+      writeSongMeta(to, { title: '' })
+    }
+    rescanManifest()
+    return { newName: target, slug: target, titleOnly: false }
   }
-  fs.renameSync(from, to)
+
+  // Target dir belongs to a different song → display-title change only
+  writeSongMeta(from, { title })
   rescanManifest()
-  return { newName }
+  return { newName: title, slug: opts.name, titleOnly: true }
 }
 
 export function renameVersion(opts: {
