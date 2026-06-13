@@ -2,7 +2,7 @@
 // parse-title.mjs — split a noisy tab-site title into song + artist
 //
 // Chinese tab sites title results in a handful of recurring shapes:
-//   歌名吉他谱_歌手_G调…        (echangwang, 17jita)
+//   歌名吉他谱_歌手_G调…        (echangwang)
 //   歌手《歌名》吉他谱…           (dapula, echangwang)
 //   歌名（歌手原版吉他谱…）       (jitashe — artist buried in parens)
 //   歌名吉他谱_G调原版_歌手_…     (jitabang — artist mid-string)
@@ -36,7 +36,7 @@ const decodeEntities = (s) =>
     .replace(/&#0?39;|&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
 
-// Trailing site / teaching-studio attribution, e.g. "_图片谱_17吉他网"
+// Trailing site / teaching-studio attribution, e.g. "_图片谱_XX吉他网"
 // or "悠音吉他课堂". Stripped before parsing so it can't be mistaken
 // for an artist segment.
 // NOTE: each pattern matches only the FINAL segment (use [^\s_] runs,
@@ -121,7 +121,7 @@ export function parseTabTitle(rawTitle, { query = '', knownArtists = [] } = {}) 
     // Song ends at the earliest tab-keyword OR opening bracket — so
     // "晴天（周杰伦原版吉他谱…）" cuts at "（", not at 吉他谱 (which sits
     // inside the parens). Artist candidates come from BOTH what follows
-    // the keyword (echangwang/17jita/jitabang) and what's inside the
+    // the keyword (echangwang/jitabang) and what's inside the
     // brackets (jitashe buries the artist there).
     const kw = t.match(TAB_KW)
     const bracketIdx = t.search(/[（(【[]/u)

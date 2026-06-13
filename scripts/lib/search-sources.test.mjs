@@ -153,10 +153,6 @@ test('未知 id 被丢弃，不报错', () => {
   assert.deepEqual(resolveSearchableSources(['bogus']), [])
 })
 
-test('非可搜索源(17jita) 不会被搜索', () => {
-  assert.deepEqual(resolveSearchableSources(['seventeen']), [])
-})
-
 test('新增免费源入列：绵羊乐谱 + 吉他园地', () => {
   for (const id of ['shaomingyang', 'jitahome']) {
     const s = SOURCE_LIST.find((x) => x.id === id)

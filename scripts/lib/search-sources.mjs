@@ -136,9 +136,8 @@ export function parseJitahome(html) {
 // ------------------------------------------------------------
 // Sources. `id` is the stable handle used by the source filter and
 // the result schema (never the Chinese display name). `searchable`
-// sources are fetched + parsed; non-searchable ones (17jita, whose
-// search.php is nginx-404'd to scrapers) are surfaced in the UI as an
-// "external search" entry only — they're never fetched here.
+// sources are fetched + parsed; non-searchable ones are surfaced in
+// the UI as an "external search" entry only — never fetched here.
 // `free`: complete multi-page sheets vs. paywalled preview.
 // ------------------------------------------------------------
 const SOURCES = [
@@ -197,21 +196,10 @@ const SOURCES = [
       `https://www.dapula.com/index.php?s=puku&c=search&keyword=${encodeURIComponent(q)}`,
     parse: parseDapula,
   },
-  {
-    // 17吉他网 — search.php is hard-blocked at the nginx layer (404 to
-    // GET/POST alike), so it can't be SSR-searched. Single-page grab
-    // DOES work (cookie challenge + GBK live in grab-core), so we list
-    // it for the UI's "去站外搜索 17吉他网" jump → paste-URL flow.
-    id: 'seventeen',
-    site: '17吉他网',
-    free: true,
-    searchable: false,
-    external: 'https://www.17jita.com',
-  },
 ]
 
 // Public, UI-facing source catalogue (no functions). Drives the source
-// filter chips and the 17jita external-search entry.
+// filter chips and external-search entries.
 export const SOURCE_LIST = SOURCES.map(({ id, site, free, searchable, external }) => ({
   id,
   site,
@@ -233,7 +221,6 @@ export const THUMB_HOST_SUFFIXES = [
   'jitahome.com',
   'jitashe.org',
   'echangwang.com',
-  '17jita.com',
   'hdslb.com', // bilibili article images (preview path)
 ]
 
@@ -249,7 +236,7 @@ export function isAllowedThumbHost(rawUrl) {
 
 // Resolve a requested id list to the searchable source ids that will
 // actually run: no/empty request → all searchable; unknown ids and
-// non-searchable ids (17jita) are dropped. Pure, so it's unit-tested.
+// non-searchable ids are dropped. Pure, so it's unit-tested.
 export function resolveSearchableSources(ids) {
   const requested = Array.isArray(ids) && ids.length > 0 ? ids : null
   return SOURCES.filter(

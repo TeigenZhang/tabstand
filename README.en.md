@@ -6,7 +6,7 @@
 
 **A self-hosted, open-source e-music-stand**
 
-Find → View → Turn → Manage your tabs, end to end
+Find → View → Turn → Manage → Shuffle, end to end
 
 [简体中文](README.md) · **English**
 
@@ -20,7 +20,7 @@ Find → View → Turn → Manage your tabs, end to end
 
 ---
 
-Playing guitar, every step around the tab is a hassle: searching tab sites is tedious, paper charts need a free hand, phone tabs cramp into a tiny screen, and the tabs you collect end up scattered everywhere. **tabstand** smooths out the whole pipeline — a self-hosted, open-source e-music-stand that covers **find → view → turn → manage**, end to end, so your hands stay on the strings while you play.
+Playing guitar, every step around the tab is a hassle: searching tab sites is tedious, paper charts need a free hand, phone tabs cramp into a tiny screen, and the tabs you collect end up scattered everywhere. **tabstand** smooths out the whole pipeline — a self-hosted, open-source e-music-stand that covers **find → view → turn → manage → shuffle**, end to end, so your hands stay on the strings while you play.
 
 Instrument-neutral by design; today it implements guitar (strumming / fingerstyle). **The tool is open source and distributable, the library stays private**: tabs are copyrighted scans and never enter git (`library/` is gitignored). Clone it, then build your own library through the in-app **Import** panel.
 
@@ -28,10 +28,10 @@ Instrument-neutral by design; today it implements guitar (strumming / fingerstyl
   <img src="docs/images/01-home.png" width="800" alt="Library home" />
 </div>
 
-## ✨ End to end: find → view → turn → manage
+## ✨ End to end: find → view → turn → manage → shuffle
 
 ### 🔍 Find
-Built-in search across common Chinese tab sites (jita5 / echangwang / and more): **free tabs download straight into the library; paid tabs you buy, then import as images**. Three entry points (search by title / paste URL / upload images) plus a manual fallback (open the source page → drag or Ctrl+V paste → reorder in preview). Match titles by pinyin / initials, or search by artist.
+Built-in search across common Chinese tab sites (jita5 / echangwang / jitabang / dapu / mianyangpiano / jitayuandi and more): **free tabs download straight into the library; paid tabs you buy, then import as images**. Three entry points (search by title / paste URL / upload images) plus a manual fallback (open the source page → drag or Ctrl+V paste → reorder in preview). Match titles by pinyin / initials, or search by artist. Thumbnail cache proxy: search results show previews; slow sources time out at 5 s without blocking the rest.
 
 ### 👀 View
 Adaptive multi-column layout (auto / 1 / 2 / 3 columns, remembered per song) — **on a desktop, a song of up to three pages lays out on one screen, no page turns**. Switchable sheet brightness, easy on the eyes.
@@ -39,8 +39,11 @@ Adaptive multi-column layout (auto / 1 / 2 / 3 columns, remembered per song) —
 ### 👇 Turn
 rAF smooth **auto-scroll** with remembered speed; `keydown` paging works with **page-turner pedals** that act as a Bluetooth keyboard (`↑↓←→` / `PageUp/Down` / space) — turn pages mid-song without lifting your hands. Wake Lock keeps the screen on; installable as a standalone PWA.
 
+### 🎲 Shuffle
+Can't decide what to play? **Mood pick** — filter by strumming / fingerstyle / all, hit "Random pick" and a song opens up. No repeats until the pool is exhausted.
+
 ### 🗂 Manage
-**All-in-one library management**: reorder / delete pages, split into versions, move back to the main tab, edit artist / title; deletes go to a recycle bin. Zero database — `library/` is scanned into an index, change it and refresh.
+**All-in-one library management**: reorder / delete pages, split into versions, move back to the main tab, edit artist / title / version name (inline editing); deletes go to a recycle bin. Songs with the same title but different artists are kept as separate entries; importing a duplicate title presents a three-way choice (new song / new version / overwrite). Zero database — `library/` is scanned into an index, change it and refresh.
 
 > 📄 **Bonus**: a Python script builds bookmarked offline PDFs (sorted by pinyin / alphabet, blank pages inserted for two-page spreads) for printing / offline practice.
 

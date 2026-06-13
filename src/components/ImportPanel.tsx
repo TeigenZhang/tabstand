@@ -48,7 +48,7 @@ interface SearchResult {
   artist?: string
   confidence?: number
 }
-// Static source catalogue (drives the filter chips + 17jita jump)
+// Static source catalogue (drives the filter chips + external jumps)
 interface SourceInfo {
   id: string
   site: string
@@ -78,8 +78,7 @@ const proxiedThumb = (url: string) => `/api/import/thumb?u=${encodeURIComponent(
 // On-demand preview state for a result with no list thumbnail
 type PreviewState = { status: 'loading' | 'ready' | 'error'; url?: string }
 
-// Build an external search-engine URL scoped to a site (17jita has no
-// SSR-searchable endpoint, so we hand the user off to Bing site search)
+// Build an external search-engine URL scoped to a site
 const siteSearchUrl = (host: string, query: string) =>
   `https://www.bing.com/search?q=${encodeURIComponent(
     `site:${host.replace(/^https?:\/\//, '')} ${query} 吉他谱`.trim()
@@ -923,8 +922,7 @@ function SearchTab(props: {
         </button>
       </div>
 
-      {/* Source filter: toggle which sites to search. 17jita can't be
-          SSR-searched (nginx-blocked), so it's a站外搜索 jump instead. */}
+      {/* Source filter: toggle which sites to search */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-stone-500">谱源</span>
         {searchable.map((s) => {
@@ -1089,7 +1087,7 @@ function UrlTab(props: {
       <input
         value={props.url}
         onChange={(e) => props.onUrl(e.target.value)}
-        placeholder="谱页网址（jita5 / jitaxp / 17jita / B站专栏…）"
+        placeholder="谱页网址（jita5 / jitaxp / B站专栏…）"
         className="field"
       />
       <input

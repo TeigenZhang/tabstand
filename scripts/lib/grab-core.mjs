@@ -6,7 +6,7 @@
 // downloads and filters them, and returns the buffers WITHOUT
 // touching the library — callers decide where they land.
 //
-// Site quirks handled: 17jita cookie challenge + GBK, bilibili
+// Site quirks handled: cookie challenge + GBK decoding, bilibili
 // /read→/opus inline-JSON images, http→https redirects, lazy-load
 // attributes, Referer-based hotlink protection.
 // ============================================================
@@ -315,7 +315,7 @@ function extractBilibiliImages(html) {
 }
 
 // ------------------------------------------------------------
-// Page fetch — charset decoding + 17jita cookie challenge
+// Page fetch — charset decoding + cookie challenge
 // ------------------------------------------------------------
 function decodeBody(buf, contentType) {
   let charset = /charset=([\w-]+)/i.exec(contentType ?? '')?.[1]
@@ -346,7 +346,7 @@ function solveCookieChallenge(html, setCookie) {
 // `method`/`body`/`headers` (optional) support POST search endpoints
 // (e.g. 吉他园地, EmpireCMS sites) whose GET form silently ignores the
 // keyword. The cookie-challenge retry always re-issues as a plain GET
-// (POST search hosts don't run the 17jita JS challenge).
+// (POST search hosts don't run the JS cookie challenge).
 export async function fetchPage(url, dispatcher, { signal, method = 'GET', body, headers = {} } = {}) {
   const res = await safeFetch(url, {
     headers: { 'User-Agent': UA, ...headers },

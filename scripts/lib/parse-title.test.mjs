@@ -52,7 +52,7 @@ test('dapula: 歌手《歌名》_类型', () => {
   assert.ok(r.confidence >= AUTO)
 })
 
-test('17jita: 空格分隔 + 站名后缀 (词表命中)', () => {
+test('站名后缀剥离: 空格分隔 + 吉他网后缀 (词表命中)', () => {
   const r = parseTabTitle(
     '往后余生吉他谱 马良 C调高清弹唱谱 悠音吉他课堂_图片谱_17吉他网',
     { knownArtists: COMMON }
@@ -62,9 +62,7 @@ test('17jita: 空格分隔 + 站名后缀 (词表命中)', () => {
   assert.ok(r.confidence >= AUTO)
 })
 
-test('17jita: 词表未命中 → 仅建议 (中置信)', () => {
-  // 烟把儿乐队 NOT in knownArtists here: still guessed, but below the
-  // auto-fill threshold so the UI only shows it as a hint.
+test('站名后缀剥离: 词表未命中 → 仅建议 (中置信)', () => {
   const r = parseTabTitle(
     '纸短情长吉他谱 烟把儿乐队 C调高清弹唱谱【视频演示】_图片谱_17吉他网',
     { knownArtists: ['周杰伦'] }
