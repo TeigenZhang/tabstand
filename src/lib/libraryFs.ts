@@ -119,6 +119,9 @@ export function appendImages(dir: string, files: string[]): void {
 
 export interface SongMeta {
   artist?: string
+  /** 角色 — whose collection this song belongs to, in a shared library.
+   *  Blank/missing means the primary role (scan applies DEFAULT_OWNER). */
+  owner?: string
   /** Human-facing title, overriding the directory name. Set only when
    *  two songs share a title and the second lives in a disambiguated
    *  dir (「姑娘 (隔壁老樊)」). Display falls back to the dir name. */
@@ -147,6 +150,10 @@ export function writeSongMeta(songDir: string, patch: SongMeta): void {
   const merged: SongMeta = { ...readSongMeta(songDir), ...patch }
   if (!merged.artist?.trim()) delete merged.artist
   else merged.artist = merged.artist.trim()
+
+  // Blank owner removes the key — scan falls back to the primary user
+  if (!merged.owner?.trim()) delete merged.owner
+  else merged.owner = merged.owner.trim()
 
   // Blank title removes the key — display falls back to the dir name
   if (!merged.title?.trim()) delete merged.title

@@ -1,9 +1,11 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Song } from '@/lib/manifest'
 import { coverUrl, pageCount } from '@/lib/songMedia'
+import { useOwner } from '@/lib/ownerContext'
+import { drawFromBag, poolKey } from '../../scripts/lib/shuffle-bag.mjs'
 
 // ============================================================
 // 随便弹 — mood picker. The library is too long to browse when
@@ -11,51 +13,51 @@ import { coverUrl, pageCount } from '@/lib/songMedia'
 // (decision fatigue) into "one low-stakes suggestion you can
 // accept or re-roll" (a slot-machine, not a forced random).
 //
-// Mood is not inferred — we have no genre/difficulty/history
-// signal to infer it from. Instead one coarse dial (弹唱/指弹,
-// the only library axis that genuinely maps to mood) lets the
-// player state intent in a tap; we random *within* that.
+// Role-scoped: it draws only from the currently-selected 角色 (or 全部),
+// so the suggestion matches whose library you're browsing.
 //
-// Anti-repeat: recent picks live in localStorage so each spin
-// feels fresh and we never hand back the song you just saw.
+// Pseudo-random, not true random (the 网易云 shuffle-bag): true random
+// re-hands you a song you just saw. Instead we remember every song shown
+// this session and never repeat one until the whole pool is exhausted,
+// then start a fresh cycle. Feels fresh, covers the library.
 // ============================================================
 
 const enc = (s: string) => encodeURIComponent(s)
 const songKey = (s: Song) => `${s.category}/${s.name}`
 
-const RECENT_STORAGE_KEY = 'tabstand:recent-picks'
-const RECENT_MAX = 8
+// Session no-repeat memory: one shuffle bag per pool (role × mood), each a Set
+// of songKeys shown this cycle. Persisted so navigating into a sheet and back
+// doesn't re-suggest what you already saw. Stored as { poolKey: [songKey, …] }.
+const BAGS_STORAGE_KEY = 'tabstand:mood-shown'
 
-function loadRecent(): string[] {
+type Bags = Map<string, Set<string>>
+
+function loadBags(): Bags {
   try {
-    const raw = localStorage.getItem(RECENT_STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : []
+    const raw = localStorage.getItem(BAGS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    // Only accept the current object shape; older formats (arrays) just reset.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new Map()
+    const bags: Bags = new Map()
+    for (const [k, arr] of Object.entries(parsed)) {
+      if (Array.isArray(arr)) bags.set(k, new Set(arr.filter((x) => typeof x === 'string')))
+    }
+    return bags
   } catch {
-    return []
+    return new Map()
   }
 }
 
-function saveRecent(keys: string[]): void {
+function saveBags(bags: Bags): void {
   try {
-    localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(keys.slice(0, RECENT_MAX)))
+    const obj: Record<string, string[]> = {}
+    bags.forEach((set, k) => {
+      obj[k] = Array.from(set)
+    })
+    localStorage.setItem(BAGS_STORAGE_KEY, JSON.stringify(obj))
   } catch {
-    // Private mode / quota — anti-repeat just degrades to pure random
+    // Private mode / quota — no-repeat degrades to per-render only
   }
-}
-
-// Pick one song at random from `pool`, avoiding `avoid` keys when
-// that still leaves something to choose, and never repeating the
-// currently-shown song unless the pool has nothing else.
-function rollFrom(pool: Song[], avoid: Set<string>, current: Song | null): Song | null {
-  if (pool.length === 0) return null
-  let pick = pool.filter((s) => !avoid.has(songKey(s)))
-  if (pick.length === 0) pick = pool // everything's been seen — reset
-  if (pick.length > 1 && current) {
-    const fresh = pick.filter((s) => songKey(s) !== songKey(current))
-    if (fresh.length > 0) pick = fresh
-  }
-  return pick[Math.floor(Math.random() * pick.length)]
 }
 
 interface Props {
@@ -65,54 +67,66 @@ interface Props {
 
 export default function MoodPick({ songs, categories }: Props) {
   const router = useRouter()
+  const { owner, owners } = useOwner()
   const [open, setOpen] = useState(false)
   // null = 所有; default to the first category (弹唱) — that's what
   // people reach for most, and it's a saner default than the whole library
   const [mood, setMood] = useState<string | null>(categories[0]?.key ?? null)
   const [current, setCurrent] = useState<Song | null>(null)
-  // Recent picks are read lazily on open so other tabs/sessions stay in sync
-  const [recent, setRecent] = useState<string[]>([])
+  // One shuffle bag per pool (role × mood). Survives modal open/close; seeded
+  // from storage on first open so it also survives navigation.
+  const bagsRef = useRef<Bags>(new Map())
+  const seededRef = useRef(false)
 
-  const pool = useMemo(
-    () => (mood ? songs.filter((s) => s.category === mood) : songs),
-    [songs, mood]
-  )
-
-  const roll = useCallback(
-    (forMood: string | null, prev: Song | null, recentKeys: string[]) => {
-      const scoped = forMood ? songs.filter((s) => s.category === forMood) : songs
-      const next = rollFrom(scoped, new Set(recentKeys), prev)
-      setCurrent(next)
-    },
-    [songs]
-  )
+  // Draw one song scoped to the current role + mood from THAT pool's own
+  // shuffle bag: random each cycle, no repeat until the pool is exhausted, and
+  // independent of other (possibly overlapping) pools. Unit-tested in
+  // scripts/lib/shuffle-bag.test.mjs.
+  const roll = (forMood: string | null, prev: Song | null) => {
+    const scoped = songs.filter(
+      (s) => (!owner || s.owner === owner) && (forMood ? s.category === forMood : true)
+    )
+    const key = poolKey(owner, forMood)
+    const bags = bagsRef.current
+    let bag = bags.get(key)
+    if (!bag) {
+      bag = new Set<string>()
+      bags.set(key, bag)
+    }
+    const next = drawFromBag(bag, scoped, prev ? songKey(prev) : null, songKey) as Song | null
+    if (next) saveBags(bags)
+    setCurrent(next)
+  }
 
   const openPicker = () => {
-    const recentKeys = loadRecent()
-    setRecent(recentKeys)
+    if (!seededRef.current) {
+      // Merge stored history in once so a reload/return doesn't repeat
+      loadBags().forEach((set, k) => bagsRef.current.set(k, set))
+      seededRef.current = true
+    }
     setOpen(true)
-    roll(mood, null, recentKeys)
+    roll(mood, null)
   }
 
   const close = () => setOpen(false)
 
   const pickMood = (key: string | null) => {
     setMood(key)
-    roll(key, current, recent) // re-roll within the new mood immediately
+    roll(key, current) // re-roll within the new mood immediately
   }
 
-  const reroll = () => roll(mood, current, recent)
+  const reroll = () => roll(mood, current)
 
-  // Commit the pick: remember it, then open the sheet
+  // Commit the pick and open the sheet (already recorded in shown by roll)
   const play = () => {
     if (!current) return
-    const next = [songKey(current), ...recent.filter((k) => k !== songKey(current))]
-    saveRecent(next)
     setOpen(false)
     router.push(`/song/${current.category}/${enc(current.name)}`)
   }
 
   if (songs.length === 0) return null
+
+  const ownerLabel = owner && owners.length > 1 ? owner : null
 
   if (!open) {
     return (
@@ -141,7 +155,14 @@ export default function MoodPick({ songs, categories }: Props) {
         aria-label="随便弹一首"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">🎸 今天弹这首？</h2>
+          <h2 className="text-lg font-semibold">
+            🎸 今天弹这首？
+            {ownerLabel && (
+              <span className="ml-2 align-middle text-xs font-medium text-amber-400/90">
+                {ownerLabel}
+              </span>
+            )}
+          </h2>
           <button
             onClick={close}
             className="text-stone-400 transition-colors hover:text-stone-100"

@@ -45,6 +45,11 @@ Can't decide what to play? **Mood pick** — filter by strumming / fingerstyle /
 ### 🗂 Manage
 **All-in-one library management**: reorder / delete pages, split into versions, move back to the main tab, edit artist / title / version name (inline editing); deletes go to a recycle bin. Songs with the same title but different artists are kept as separate entries; importing a duplicate title presents a three-way choice (new song / new version / overwrite). Zero database — `library/` is scanned into an index, change it and refresh.
 
+### 👥 Roles (optional)
+When one library is shared by two people (you and a bandmate / student / family member), each tab can carry a **role**: the list filters by role, and Shuffle only draws from the role you're browsing. It opens on your **primary role** and remembers your last choice.
+
+Roles are entirely opt-in: a single-person library has exactly one role, all role UI stays hidden, and it behaves as if the feature weren't there. To add a second role, type a new name into the **角色** field in the manage panel and hit enter — no configuration needed.
+
 > 📄 **Bonus**: a Python script builds bookmarked offline PDFs (sorted by pinyin / alphabet, blank pages inserted for two-page spreads) for printing / offline practice.
 
 ## 📸 Screenshots
@@ -96,18 +101,32 @@ npm run grab -- <url> --name <title> --category strumming|fingerstyle [--version
 
 Chinese tab-site CDNs connect directly by default; set `GRAB_PROXY=http://127.0.0.1:7890` when you need a proxy (Node fetch via undici ProxyAgent).
 
+### Optional config
+
+It runs with zero config. To rename your **primary role** (defaults to 我 / "me", see [Roles](#-roles-optional)):
+
+```bash
+cp data/config.example.json data/config.json   # set defaultOwner to your own name
+npm run scan                                   # rebuild the index to apply
+```
+
+`data/config.json` is gitignored — the name is yours, the tool is everyone's. Changing it renames every tab that has no explicit owner, without touching a single file on disk.
+
 ## 📁 Directory layout
 
 ```
 library/strumming/<title>/                   strumming tabs, images numbered 1.png 2.png… (gitignored)
 library/fingerstyle/<title>/                 fingerstyle tabs, same shape
 library/<category>/<title>/versions/<name>/  multiple versions of one song
-library/<category>/<title>/meta.json         song-level metadata (artist, optional)
+library/<category>/<title>/meta.json         song-level metadata (artist / role, optional)
+data/config.json                             per-install config (primary role name, optional, gitignored)
 data/manifest.json                           scan-generated index (gitignored)
 output/                                       generated PDFs (gitignored)
 ```
 
 `library/` is entirely gitignored: the tool is public, the library is private.
+
+> **Upgrading from an older version**: roles were added later and need no migration. Older tabs have no `owner` field in `meta.json`, so the scan files them under your primary role — not one byte on disk is rewritten. Just run `npm run build` (or `npm run scan`) once after upgrading to rebuild the index.
 
 ## 🛠 Tech stack
 

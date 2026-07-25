@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pinyin } from 'pinyin-pro'
+import { defaultOwner } from './lib/config.mjs'
 
 const ROOT = process.cwd()
 const LIBRARY_DIR = path.join(ROOT, 'library')
@@ -14,6 +15,17 @@ const CATEGORIES = [
   { key: 'strumming', label: '弹唱' },
   { key: 'fingerstyle', label: '指弹' },
 ]
+
+// Owner (角色) — whose collection a song belongs to, for a library
+// shared between people. Songs without meta.owner (every song imported
+// before the feature existed) fall back to the default owner, so an
+// upgrade needs no migration: nothing on disk changes, and a library
+// with one owner hides the role UI entirely.
+//
+// The name itself is per-install (data/config.json) — renaming it
+// re-labels every unowned song at once, which is exactly what you want
+// when you claim the library as your own.
+const DEFAULT_OWNER = defaultOwner()
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.jfif', '.webp'])
 const VERSIONS_DIR = 'versions'
@@ -104,6 +116,13 @@ function scanCategory({ key, label }) {
       const meta = readMeta(songDir)
       const artist = typeof meta.artist === 'string' ? meta.artist.trim() : ''
 
+      // Owner tag — travels in meta.json like artist/title. Blank or
+      // missing falls back to the primary user.
+      const owner =
+        typeof meta.owner === 'string' && meta.owner.trim()
+          ? meta.owner.trim()
+          : DEFAULT_OWNER
+
       // Display title vs identity: the directory name is the song's
       // permanent identity (URL slug, edit-op key, filesystem
       // uniqueness). meta.title — set only when two songs share a
@@ -143,6 +162,7 @@ function scanCategory({ key, label }) {
         rev,
         name: songName, // directory name — identity / URL slug
         title, // human-facing name (meta.title || songName)
+        owner, // 角色 — whose collection this song belongs to
         category: key,
         categoryLabel: label,
         // Search indexes the DISPLAY title, so typing「姑娘」still
@@ -181,8 +201,25 @@ const songs = CATEGORIES.flatMap((category) =>
   sortSongs(scanCategory(category))
 )
 
+// Owners present in the library, default user first, the rest by song
+// count then name — drives the 分角色 filter in the UI.
+const ownerCounts = songs.reduce((m, s) => m.set(s.owner, (m.get(s.owner) ?? 0) + 1), new Map())
+// Always surface the default owner, even at count 0 — otherwise, if the
+// last default-owned song is reassigned away, import would fall back to
+// owners[0] (another role) and silently misfile new songs there.
+if (!ownerCounts.has(DEFAULT_OWNER)) ownerCounts.set(DEFAULT_OWNER, 0)
+const owners = Array.from(ownerCounts.entries())
+  .sort(
+    (a, b) =>
+      (a[0] === DEFAULT_OWNER ? -1 : 0) - (b[0] === DEFAULT_OWNER ? -1 : 0) ||
+      b[1] - a[1] ||
+      a[0].localeCompare(b[0], 'zh-CN')
+  )
+  .map(([name, count]) => ({ name, count }))
+
 const manifest = {
   categories: CATEGORIES,
+  owners,
   total: songs.length,
   songs,
 }

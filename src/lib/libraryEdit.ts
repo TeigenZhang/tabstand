@@ -222,6 +222,14 @@ export function movePages(opts: {
 // Metadata
 // ------------------------------------------------------------
 
+// Force a manifest rebuild. Used as a recovery when a commit's own rescan
+// failed (e.g. a transient error) — the song is already on disk, this just
+// refreshes the index so it shows up without restarting the server.
+export function rescan(): { ok: true } {
+  rescanManifest()
+  return { ok: true }
+}
+
 // Set / clear the song's artist ('' clears). No safeSegment here —
 // the artist is file CONTENT (meta.json), not a path segment.
 export function setArtist(opts: {
@@ -235,6 +243,21 @@ export function setArtist(opts: {
   writeSongMeta(dir, { artist })
   rescanManifest()
   return { artist }
+}
+
+// Set / clear the song's owner (角色). '' clears → scan falls back to
+// the primary user. Content, not a path segment — no safeSegment.
+export function setOwner(opts: {
+  category: string
+  name: string
+  owner: string
+}): { owner: string } {
+  const dir = pageDir(opts.category, opts.name)
+  assertExists(dir)
+  const owner = typeof opts.owner === 'string' ? opts.owner.trim() : ''
+  writeSongMeta(dir, { owner })
+  rescanManifest()
+  return { owner }
 }
 
 // ------------------------------------------------------------

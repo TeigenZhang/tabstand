@@ -27,6 +27,9 @@ interface Props {
   name: string // directory name — identity, used by every edit op
   title: string // human-facing name (may differ from name)
   artist: string
+  owner: string // 角色 — whose collection
+  /** All owner names in the library, for quick-pick reassignment */
+  owners: string[]
   version: string | null
   pages: PageItem[]
   hasVersions: boolean
@@ -41,6 +44,8 @@ export default function EditPanel({
   name,
   title,
   artist,
+  owner,
+  owners,
   version,
   pages,
   hasVersions,
@@ -56,6 +61,7 @@ export default function EditPanel({
   const [splitName, setSplitName] = useState('')
   const [renameName, setRenameName] = useState('')
   const [artistValue, setArtistValue] = useState(artist)
+  const [ownerValue, setOwnerValue] = useState(owner)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [verOrder, setVerOrder] = useState<string[]>(() => versions)
   const [demoteName, setDemoteName] = useState('')
@@ -72,6 +78,9 @@ export default function EditPanel({
 
   // Same for the artist after a setArtist round-trip
   useEffect(() => setArtistValue(artist), [artist])
+
+  // And the owner after a setOwner round-trip
+  useEffect(() => setOwnerValue(owner), [owner])
 
   // And for the version list after reorder / promote / rename
   useEffect(() => {
@@ -265,6 +274,13 @@ export default function EditPanel({
     const data = await post({ op: 'setArtist', artist: artistValue })
     if (!data) return
     go() // stay on the page, just refresh the manifest-driven UI
+  }
+
+  async function saveOwner(next: string) {
+    setOwnerValue(next) // optimistic — the buttons reflect the pick at once
+    const data = await post({ op: 'setOwner', owner: next })
+    if (!data) return
+    go()
   }
 
   async function doRenameSong() {
@@ -603,9 +619,38 @@ export default function EditPanel({
         {/* Metadata + danger zone — artist, renames, deletes */}
         <details className="rounded-lg border border-stone-800">
           <summary className="cursor-pointer select-none px-3 py-2 text-sm text-stone-400 hover:text-stone-200">
-            歌手 / 改名 / 删除
+            角色 / 歌手 / 改名 / 删除
           </summary>
           <div className="flex flex-col gap-2 border-t border-stone-800 p-3">
+            {/* 角色 — quick-pick known owners, or type a new one */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-0.5 text-xs text-stone-500">角色</span>
+              {Array.from(new Set([...owners, ownerValue].filter(Boolean))).map((o) => (
+                <button
+                  key={o}
+                  onClick={() => saveOwner(o)}
+                  disabled={busy}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                    ownerValue === o
+                      ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                      : 'border-stone-800 bg-stone-900/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                  }`}
+                >
+                  {o}
+                </button>
+              ))}
+              <input
+                value={ownerValue}
+                onChange={(e) => setOwnerValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && ownerValue.trim() && ownerValue.trim() !== owner) {
+                    saveOwner(ownerValue.trim())
+                  }
+                }}
+                placeholder="新角色 ↵"
+                className="field w-24 py-1 text-xs"
+              />
+            </div>
             <div className="flex gap-2">
               <input
                 value={artistValue}

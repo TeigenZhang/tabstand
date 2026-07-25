@@ -118,6 +118,8 @@ export default function SongPage({ params }: Props) {
           name={song.name}
           title={song.title}
           artist={song.artist ?? ''}
+          owner={song.owner}
+          owners={manifest.owners.map((o) => o.name)}
           version={versionName}
           pages={pages.map((p, i) => ({ file: p, url: imageUrls[i] }))}
           hasVersions={song.versions.length > 0}

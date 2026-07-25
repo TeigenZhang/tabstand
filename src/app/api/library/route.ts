@@ -8,10 +8,12 @@ import {
   demoteMain,
   movePages,
   promoteVersion,
+  rescan,
   renameSong,
   renameVersion,
   reorderVersions,
   setArtist,
+  setOwner,
 } from '@/lib/libraryEdit'
 
 export const runtime = 'nodejs'
@@ -34,6 +36,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, ...renameSong(body) })
       case 'setArtist':
         return NextResponse.json({ ok: true, ...setArtist(body) })
+      case 'setOwner':
+        return NextResponse.json({ ok: true, ...setOwner(body) })
+      case 'rescan':
+        return NextResponse.json({ ...rescan() })
       case 'renameVersion':
         return NextResponse.json({ ok: true, ...renameVersion(body) })
       case 'reorderVersions':

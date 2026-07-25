@@ -13,9 +13,9 @@ export async function POST(req: NextRequest) {
   const crossOrigin = checkSameOrigin(req)
   if (crossOrigin) return crossOrigin
   try {
-    const { id, category, name, version, artist, files, mode } = await req.json()
+    const { id, category, name, version, artist, owner, files, mode } = await req.json()
     if (!id) return NextResponse.json({ error: '缺少 id' }, { status: 400 })
-    const result = commitStaging({ id, category, name, version, artist, files, mode })
+    const result = commitStaging({ id, category, name, version, artist, owner, files, mode })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
     if (error instanceof CommitConflictError) {

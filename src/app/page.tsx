@@ -2,6 +2,7 @@ import { readManifest } from '@/lib/manifest'
 import SongList from '@/components/SongList'
 import ImportPanel from '@/components/ImportPanel'
 import MoodPick from '@/components/MoodPick'
+import { OwnerProvider } from '@/lib/ownerContext'
 import { SOURCE_LIST } from '../../scripts/lib/search-sources.mjs'
 
 // Manifest is read per-request; a re-scan only needs a page refresh
@@ -11,6 +12,7 @@ export default function HomePage() {
   const manifest = readManifest()
 
   return (
+    <OwnerProvider owners={manifest.owners.map((o) => o.name)}>
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
       <header className="mb-8 flex items-end justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -38,6 +40,7 @@ export default function HomePage() {
           <ImportPanel
             categories={manifest.categories}
             sources={SOURCE_LIST}
+            owners={manifest.owners.map((o) => o.name)}
             songs={manifest.songs.map((s) => ({
               category: s.category,
               name: s.name,
@@ -50,5 +53,6 @@ export default function HomePage() {
       </header>
       <SongList manifest={manifest} />
     </main>
+    </OwnerProvider>
   )
 }

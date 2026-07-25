@@ -182,12 +182,13 @@ export function commitStaging(opts: {
   name: string
   version?: string
   artist?: string // song-level metadata, written to <songDir>/meta.json
+  owner?: string // 角色 — whose collection (blank → primary user)
   files?: string[] // whitelist of staged filenames to keep (default: all)
   // 'append' — consent to add after an existing song's pages.
   // 'newsong' — a distinct song that happens to share the title;
   //   lands in a disambiguated dir with the clean title in meta.json.
   mode?: 'append' | 'newsong'
-}): { targetDir: string; count: number } {
+}): { targetDir: string; count: number; rescanned: boolean } {
   const category = assertCategory(opts.category)
   const title = safeSegment(opts.name) // typed name = display title
   const version = opts.version ? safeSegment(opts.version) : null
@@ -231,23 +232,108 @@ export function commitStaging(opts: {
     throw new CommitConflictError(version ? `${title} · ${version}` : title, existingPages)
   }
 
-  appendImages(targetDir, staged.map((file) => path.join(source, file)))
-
-  // Record the clean display title only when the dir had to be
-  // disambiguated (dir name ≠ title); otherwise the dir name IS the
-  // title and meta.title would be redundant.
-  if (dirName !== title) {
-    writeSongMeta(songDir, { title })
+  // Whether a REAL song already lived here BEFORE this commit — decides
+  // whether owner may be written (see below). Keyed off actual page
+  // content (main sheet or a version that HAS pages) plus a saved
+  // meta.json — never bare dir existence. An empty leftover dir, or an
+  // empty versions/<name>/ a prior failed commit created, must NOT read
+  // as "existing" and rob a new song of its chosen owner on retry. A
+  // disambiguated 'newsong' dir is fresh by construction.
+  const hasPagesAnywhere = (dir: string): boolean => {
+    if (listImages(dir).length > 0) return true
+    const vd = path.join(dir, 'versions')
+    if (!fs.existsSync(vd)) return false
+    return fs
+      .readdirSync(vd, { withFileTypes: true })
+      .some((e) => e.isDirectory() && listImages(path.join(vd, e.name)).length > 0)
   }
-  // Artist is song-level (not per version) — write it only when the
-  // user actually typed one, so re-imports can't blank existing meta
-  if (typeof opts.artist === 'string' && opts.artist.trim()) {
-    writeSongMeta(songDir, { artist: opts.artist })
+  const songExisted =
+    !isNewSong &&
+    (hasPagesAnywhere(songDir) || fs.existsSync(path.join(songDir, 'meta.json')))
+
+  // Filesystem commits aren't transactional. The invariant we hold: once
+  // the staging session is CONSUMED it can never be committed again, so no
+  // failure (or double-submit, or failed cleanup) can produce a duplicate.
+  //
+  // NEW song: first CLAIM the session with an atomic rename — the moment it
+  //   succeeds the session id is gone, so any resubmit hits '暂存已失效'.
+  //   Then assemble the whole song (pages renumbered + meta.json) in a build
+  //   dir and land it with a second atomic rename: pages and owner appear
+  //   together or not at all. Claiming up front trades retryability for
+  //   idempotency on purpose — a rare mid-assembly failure means re-scrape,
+  //   which is far better than a silently duplicated or misfiled song.
+  // EXISTING song (append / add-version): appendImages MOVES pages out of
+  //   the session (consuming it), then artist is updated if given. Owner is
+  //   never rewritten, so the form default can't hijack an owned song;
+  //   role reassignment goes through the edit op.
+  if (!songExisted) {
+    const claimDir = path.join(STAGING_DIR, `.claim-${safeSegment(opts.id)}`)
+    const buildDir = path.join(STAGING_DIR, `.build-${safeSegment(opts.id)}`)
+    const relTarget = version && !isNewSong ? path.join('versions', version) : '.'
+    fs.rmSync(claimDir, { recursive: true, force: true }) // clear a prior aborted attempt
+    fs.renameSync(source, claimDir) // CLAIM: session id no longer exists → no re-commit
+    try {
+      fs.rmSync(buildDir, { recursive: true, force: true })
+      const pagesDir = path.join(buildDir, relTarget)
+      fs.mkdirSync(pagesDir, { recursive: true })
+      // Move the selected pages into place, renumbered in display order.
+      staged.forEach((file, i) => {
+        const ext = path.extname(file).toLowerCase()
+        fs.renameSync(path.join(claimDir, file), path.join(pagesDir, `${i + 1}${ext}`))
+      })
+      // meta.json is built INSIDE the build dir so it lands atomically with
+      // the pages. title only when the dir was disambiguated; artist/owner
+      // only when provided (the form always sends owner for a shared library).
+      const meta: { title?: string; artist?: string; owner?: string } = {}
+      if (dirName !== title) meta.title = title
+      if (typeof opts.artist === 'string' && opts.artist.trim()) meta.artist = opts.artist.trim()
+      if (typeof opts.owner === 'string' && opts.owner.trim()) meta.owner = opts.owner.trim()
+      if (Object.keys(meta).length > 0) {
+        fs.writeFileSync(path.join(buildDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`)
+      }
+      // Land it atomically. Any empty leftover dir (songExisted is false, so
+      // it holds no real content) is cleared first so rename can't ENOTEMPTY.
+      fs.mkdirSync(path.dirname(songDir), { recursive: true })
+      fs.rmSync(songDir, { recursive: true, force: true })
+      fs.renameSync(buildDir, songDir)
+    } catch (err) {
+      fs.rmSync(buildDir, { recursive: true, force: true })
+      throw err
+    } finally {
+      // Post-commit housekeeping: dropping leftovers must never throw out of
+      // a landed commit (nor mask a pre-commit error being rethrown above).
+      try {
+        fs.rmSync(claimDir, { recursive: true, force: true }) // non-selected leftovers
+      } catch {
+        // swept by the staging TTL if it lingers
+      }
+    }
+  } else {
+    appendImages(targetDir, staged.map((file) => path.join(source, file)))
+    // Artist is song-level — write only when the user typed one, so an
+    // append can't blank existing meta. Owner stays as-is (preserved).
+    if (typeof opts.artist === 'string' && opts.artist.trim()) {
+      writeSongMeta(songDir, { artist: opts.artist })
+    }
+    // Post-commit: draining the session must not fail an already-appended song
+    try {
+      cleanupStaging(opts.id)
+    } catch {
+      // swept by the staging TTL if it lingers
+    }
   }
-  cleanupStaging(opts.id)
 
-  // Refresh the manifest so the new song shows up immediately
-  rescanManifest()
+  // The song is now durably in place — the commit has SUCCEEDED. The manifest
+  // is a derived cache: a refresh failure must neither abort the commit
+  // (mislabeling a landed song as failed) nor be hidden (masking a stale
+  // manifest as clean success). Report it as a flag. A retry is safe anyway —
+  // the session is consumed, so it resolves to '暂存已失效', never a duplicate.
+  let rescanned = true
+  try {
+    rescanManifest()
+  } catch {
+    rescanned = false
+  }
 
-  return { targetDir: path.relative(process.cwd(), targetDir), count: staged.length }
+  return { targetDir: path.relative(process.cwd(), targetDir), count: staged.length, rescanned }
 }

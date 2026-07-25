@@ -102,10 +102,12 @@ export default function ImportPanel({
   categories,
   sources,
   songs,
+  owners,
 }: {
   categories: Category[]
   sources: SourceInfo[]
   songs: SongSummary[]
+  owners: string[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -117,6 +119,11 @@ export default function ImportPanel({
   const [artist, setArtist] = useState('')
   const [version, setVersion] = useState('')
   const [category, setCategory] = useState(categories[0]?.key ?? 'strumming')
+  // 角色 — defaults to the primary role (scan sorts it first); the selector
+  // shows only when the library is shared (≥2 owners). Empty when there are
+  // no owners at all, and an empty owner is simply not written to meta.json,
+  // so scan's own default applies.
+  const [owner, setOwner] = useState(owners[0] ?? '')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[] | null>(null)
   const [sourceStatus, setSourceStatus] = useState<SourceStatus[] | null>(null)
@@ -371,6 +378,9 @@ export default function ImportPanel({
           category,
           name,
           artist: artist.trim() || undefined,
+          // Only send a role when the library is shared (selector shown);
+          // a single-owner install keeps meta clean and defaults server-side
+          owner: owners.length > 1 ? owner.trim() || undefined : undefined,
           version: version || undefined,
           files: keep, // display order = page order
           mode,
@@ -384,6 +394,24 @@ export default function ImportPanel({
         return
       }
       if (!res.ok) throw new Error(data.error ?? '入库失败')
+      // The song IS saved even if the manifest refresh failed server-side. A
+      // page reload alone can't fix it — the index is generated server-side —
+      // so re-run the scan via the API. Only if THAT also fails do we tell the
+      // user, and honestly (restart / CLI scan), not "just reload the page".
+      if (data.rescanned === false) {
+        try {
+          const r = await fetch('/api/library', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ op: 'rescan' }),
+          })
+          if (!r.ok) throw new Error()
+        } catch {
+          window.alert(
+            '已入库到本地，但谱库索引刷新失败，暂时不会出现在列表里。请重启服务，或在命令行运行 npm run scan。'
+          )
+        }
+      }
       reset()
       setOpen(false)
       router.refresh()
@@ -547,6 +575,8 @@ export default function ImportPanel({
             version={version}
             category={category}
             categories={categories}
+            owner={owner}
+            owners={owners}
             existing={existing}
             conflict={conflict}
             versionInputRef={versionInputRef}
@@ -560,6 +590,7 @@ export default function ImportPanel({
               setConflict(null) // a different target voids the previous 409
             }}
             onArtist={setArtist}
+            onOwner={setOwner}
             onVersion={(v) => {
               setVersion(v)
               setConflict(null)
@@ -651,6 +682,8 @@ function StagingPreview(props: {
   version: string
   category: string
   categories: Category[]
+  owner: string
+  owners: string[]
   existing: SongSummary | null
   conflict: number | null
   versionInputRef: React.RefObject<HTMLInputElement>
@@ -661,6 +694,7 @@ function StagingPreview(props: {
   onMagnify: (index: number) => void
   onName: (v: string) => void
   onArtist: (v: string) => void
+  onOwner: (v: string) => void
   onVersion: (v: string) => void
   onCategory: (v: string) => void
   onCommit: () => void
@@ -777,6 +811,27 @@ function StagingPreview(props: {
             className="field flex-1"
           />
         </div>
+
+        {/* 角色 — whose collection this import lands in. Only when the
+            library is shared between ≥2 people. */}
+        {props.owners.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-0.5 text-xs text-stone-500">角色</span>
+            {props.owners.map((o) => (
+              <button
+                key={o}
+                onClick={() => props.onOwner(o)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  props.owner === o
+                    ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                    : 'border-stone-800 bg-stone-900/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                }`}
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Same-title fork — shown UP FRONT (no need to commit first and
             get rejected). The library already has a song by this title:

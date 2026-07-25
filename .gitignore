@@ -21,6 +21,9 @@ tsconfig.tsbuildinfo
 # Personal tab-source archive — keep the example, ignore your own list
 /data/sources.json
 
+# Per-install config (角色名 etc.) — keep the example, ignore your own
+/data/config.json
+
 # Environment config
 .env.local
 .env*.local
@@ -44,3 +47,4 @@ __pycache__/
 # Browser automation artifacts
 .playwright-cli/
 .context/
+backups/

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Manifest, Song } from '@/lib/manifest'
 import { coverUrl, pageCount } from '@/lib/songMedia'
+import { useOwner } from '@/lib/ownerContext'
 
 // ============================================================
 // Song browser — thumbnail card grid with category tabs and
@@ -42,6 +43,13 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
   const [artistFilter, setArtistFilter] = useState<string | null>(null)
   const [isNarrow, setIsNarrow] = useState(false)
 
+  // owner === null → 全部 (all roles). Shared via context so the picker
+  // ("随便弹") follows the same role, the default lands on the primary role,
+  // and the choice survives navigating into a sheet and back.
+  const { owner, setOwner } = useOwner()
+  const owners = manifest.owners ?? []
+  const showOwnerFilter = owners.length > 1
+
   // Placeholder copy can't respond to breakpoints in CSS — track it here
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)')
@@ -51,36 +59,81 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
     return () => mq.removeEventListener('change', update)
   }, [])
 
-  // Artists present in the current category, most songs first
+  // Artists present in the current category (and owner), most songs first
   const artists = useMemo(() => {
     const counts = new Map<string, number>()
     for (const s of manifest.songs) {
       if (s.category !== category || !s.artist) continue
+      if (owner && s.owner !== owner) continue
       counts.set(s.artist, (counts.get(s.artist) ?? 0) + 1)
     }
     return Array.from(counts.entries()).sort(
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN')
     )
-  }, [manifest.songs, category])
+  }, [manifest.songs, category, owner])
 
   const pickCategory = (key: string) => {
     setCategory(key)
     setArtistFilter(null) // the filter belongs to the old category's list
   }
 
+  const pickOwner = (next: string | null) => {
+    setOwner(next)
+    setArtistFilter(null) // artists differ per owner; drop the stale pick
+  }
+
+  // Count per category, scoped to the selected owner — the tab badges
+  const categoryCount = (key: string) =>
+    manifest.songs.filter(
+      (s) => s.category === key && (!owner || s.owner === owner)
+    ).length
+
   const visible = useMemo(
     () =>
       manifest.songs.filter(
         (s) =>
           s.category === category &&
+          (!owner || s.owner === owner) &&
           (!artistFilter || s.artist === artistFilter) &&
           matches(s, query)
       ),
-    [manifest.songs, category, artistFilter, query]
+    [manifest.songs, category, owner, artistFilter, query]
   )
 
   return (
     <div>
+      {/* 分角色 — whose collection. Only when the library is shared. */}
+      {showOwnerFilter && (
+        <div className="mb-5 flex items-center gap-2 overflow-x-auto pb-0.5">
+          <span className="shrink-0 text-xs text-stone-500">角色</span>
+          <div className="inline-flex gap-1 rounded-full bg-stone-900/80 p-1 ring-1 ring-stone-800">
+            {[{ name: null as string | null, count: manifest.total }, ...owners].map(
+              (o) => {
+                const active = owner === o.name
+                return (
+                  <button
+                    key={o.name ?? '__all__'}
+                    onClick={() => pickOwner(o.name)}
+                    className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                      active
+                        ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-900/40'
+                        : 'text-stone-400 hover:text-stone-100'
+                    }`}
+                  >
+                    {o.name ?? '全部'}
+                    <span
+                      className={`font-tuner ml-1.5 text-xs ${active ? 'opacity-70' : 'opacity-50'}`}
+                    >
+                      {o.count}
+                    </span>
+                  </button>
+                )
+              }
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="group relative mb-5">
         <svg
@@ -111,7 +164,7 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="inline-flex gap-1 rounded-full bg-stone-900/80 p-1 ring-1 ring-stone-800">
           {manifest.categories.map(({ key, label }) => {
-            const count = manifest.songs.filter((s) => s.category === key).length
+            const count = categoryCount(key)
             const active = category === key
             return (
               <button
@@ -251,6 +304,12 @@ export default function SongList({ manifest }: { manifest: Manifest }) {
                     <span className="font-tuner absolute right-1.5 top-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
                       {pageCount(song)}页
                     </span>
+                    {/* Whose collection — only in the 全部 (all-roles) view */}
+                    {showOwnerFilter && owner === null && (
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-amber-500/85 px-1.5 py-0.5 text-[11px] font-medium text-stone-950 backdrop-blur-sm">
+                        {song.owner}
+                      </span>
+                    )}
                   </div>
                   <div className="px-2.5 py-2">
                     <span className="block truncate text-sm font-medium text-stone-100 transition-colors group-hover:text-amber-300">

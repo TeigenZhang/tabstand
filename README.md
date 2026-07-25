@@ -45,6 +45,11 @@ rAF 平滑**自动滚动** + 调速记忆；`keydown` 翻页兼容把自己当�
 ### 🗂 管谱
 **all-in-one 谱库管理**：调页序、删页、拆版本、移回主谱、改歌手 / 歌名 / 版本名（行内编辑），软删除进回收站防误删。同名不同歌手可作为两首歌区分，导入同名歌时三岔选择（新歌 / 同歌新版本 / 覆盖）。零数据库——`library/` 扫描成索引，改库刷新即生效。
 
+### 👥 分角色（可选）
+一个谱库两个人用（你和搭档 / 学生 / 家人）时，每首谱可挂一个**角色**：列表按角色筛选，「随便弹」也只在当前角色里抽。打开默认落在**主角色**，切换后记住上次选择。
+
+角色是**纯可选**的：单人谱库只有一个角色，角色相关的 UI 全部隐藏，用起来和没这功能一样。想加第二个角色，在管谱面板的「角色」栏直接输入新名字回车即可，无需任何配置。
+
 > 📄 **附带**：Python 脚本可离线生成带书签 PDF（按拼音 / 字母排序 + 双页对齐补白），打印 / 离线练习兜底。
 
 ## 📸 截图
@@ -96,18 +101,32 @@ npm run grab -- <url> --name <歌名> --category strumming|fingerstyle [--versio
 
 国内谱站 CDN 默认直连；需代理时设 `GRAB_PROXY=http://127.0.0.1:7890`（Node fetch 经 undici ProxyAgent）。
 
+### 可选配置
+
+零配置即可跑。想改**主角色**的名字（默认「我」，见[分角色](#-分角色可选)）：
+
+```bash
+cp data/config.example.json data/config.json   # 改 defaultOwner 为你自己的名字
+npm run scan                                   # 重新生成索引即生效
+```
+
+`data/config.json` 已 gitignore——名字是你的，工具是大家的。改这个名字会一次性重命名所有未显式归属的谱，不动磁盘上任何文件。
+
 ## 📁 目录结构
 
 ```
 library/strumming/<歌名>/                    弹唱谱，图片按 1.png 2.png… 编号（gitignore）
 library/fingerstyle/<歌名>/                  指弹谱，结构同上
 library/<分类>/<歌名>/versions/<版本名>/      同曲多版本
-library/<分类>/<歌名>/meta.json              歌曲级元数据（歌手名，可选）
+library/<分类>/<歌名>/meta.json              歌曲级元数据（歌手 / 角色，可选）
+data/config.json                            本机配置（主角色名，可选，gitignore）
 data/manifest.json                          scan 生成的索引（gitignore）
 output/                                      生成的 PDF（gitignore）
 ```
 
 `library/` 整体 gitignore：工具公开、谱库私有。
+
+> **从旧版本升级**：角色是后加的，无需迁移。旧谱的 `meta.json` 里没有 `owner` 字段，扫描时自动归入主角色——磁盘上一个字节都不会被改写。升级后跑一次 `npm run build`（或 `npm run scan`）重建索引即可。
 
 ## 🛠 技术栈
 
